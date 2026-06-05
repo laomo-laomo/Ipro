@@ -1,0 +1,241 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  openid      String?  @unique
+  phone       String?  @unique
+  nickname    String?
+  avatar      String?
+  role        String   @default("user")  // user, admin
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  characters  Character[]
+  stories     Story[]
+voices      UserVoice[]
+  memberships Membership[]
+  orders      Order[]
+  notifications PaymentNotification[]
+}
+
+model UserVoice {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  audioUrl    String
+  modelUrl    String?
+  status      String    @default("processing") // processing, active, expired, failed
+  progress    Int       @default(0) // 0-100 polling progress
+  expiresAt   DateTime?
+  pollingStartedAt DateTime? // when polling started
+  pollingEndedAt   DateTime? // when polling ended
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Character {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  originalPhotoUrl   String
+  stylizedPhotoUrl   String?
+  featureDesc        String?
+  status             String   @default("pending") // pending, processing, completed
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Story {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  characterId String?
+  title       String
+  content     String
+  scenes      String   // JSON: [{index, description, text}]
+  source      String   @default("template") // template, custom
+  status      String   @default("draft") // draft, processing, illustrated, completed
+  totalCost   Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  illustrations Illustration[]
+  videos        Video[]
+  sceneAudios   SceneAudio[]
+
+  @@index([userId])
+}
+
+model Illustration {
+  id               String   @id @default(cuid())
+  storyId          String
+  story            Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  sceneIndex       Int
+  imageUrl         String?
+  prompt           String?
+  originalPrompt   String?
+  errorMessage     String?
+  failureCategory  String?
+  retryCount       Int      @default(0)
+  status           String   @default("pending") // pending, processing, completed, failed
+  cost             Float    @default(0)
+  createdAt        DateTime @default(now())
+
+  @@unique([storyId, sceneIndex])
+  @@index([storyId])
+}
+
+model SceneAudio {
+  id          String   @id @default(cuid())
+  storyId     String
+  story       Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  sceneIndex  Int
+  audioUrl    String?
+  text        String
+  audioType   String   @default("tts") // tts, cloned
+  voiceId     String?
+  voiceName   String?
+  voice       String?
+  charCount   Int      @default(0)
+  status      String   @default("pending") // pending, processing, completed, failed
+  errorMessage String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([storyId, sceneIndex])
+  @@index([storyId])
+  @@index([status])
+}
+
+model Video {
+  id          String   @id @default(cuid())
+  storyId     String
+  story       Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  videoUrl    String?
+  audioUrl    String?  // Audio URL used for rendering
+  audioType   String   @default("tts") // tts, cloned
+  voiceId     String?
+  charCount   Int      @default(0)
+  cost        Float    @default(0)
+  status      String   @default("pending") // pending, processing, completed, failed
+  // Metadata after completion
+  duration    Float?   // Duration in seconds
+  resolution  String?  // e.g., "1920x1080"
+  fileSize    Int?     // File size in bytes
+  renderer    String   @default("ffmpeg") // ffmpeg | remotion
+  createdAt   DateTime @default(now())
+
+  @@index([storyId])
+}
+
+model Membership {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cardType    String   // weekly, monthly, quarterly, yearly
+  quota       Int      @default(0)
+  usedQuota   Int      @default(0)
+  expiresAt   DateTime
+  status      String   @default("active") // active, expired
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Order {
+  id              String   @id @default(cuid())
+  orderNo         String   @unique
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type            String   // image, story, membership, voice_clone, video
+  amount          Float
+  status          String   @default("pending") // pending, paid, refunded, cancelled
+  paymentChannel  String?  // wechat, alipay, stripe
+  transactionId   String?
+  metadata        String?  // JSON: 额外数据
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model PriceConfig {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Float
+  description String?
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+}
+
+model StoryTemplate {
+  id          String   @id @default(cuid())
+  title       String   @unique
+  content     String
+  scenes      String   // JSON: 预定义场景
+  cover       String?
+  status      String   @default("active") // active, disabled
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PhoneCode {
+  id          String   @id @default(cuid())
+  phone       String
+  code        String
+  expiresAt   DateTime
+  used        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([phone])
+  @@index([expiresAt])
+}
+
+model PaymentNotification {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String   // payment_success, order_cancelled, membership_expired, etc.
+  title       String
+  content     String
+  data        String?  // JSON: additional data
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model PaymentLog {
+  id          String   @id @default(cuid())
+  orderNo     String
+  channel     String   // wechat, alipay, stripe
+  event       String   // callback, webhook, etc.
+  requestData String   // JSON: raw request data
+  responseData String? // JSON: response sent
+  status      String   // success, failed, error
+  errorMessage String?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([orderNo])
+  @@index([channel])
+  @@index([createdAt])
+}

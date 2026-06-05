@@ -1,0 +1,4 @@
+  File "F:\IPro\apps\api\check_all_tpl.py", line 13
+    print(f'  - idx={s.get(\"index\")}: {s.get(\"description\")!r}')
+                            ^
+SyntaxError: unexpected character after line continuation character

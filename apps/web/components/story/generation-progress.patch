@@ -1,0 +1,18 @@
+*** Begin Patch
+*** Update File: F:\IPro\apps\web\components\story\generation-progress.tsx
+@@ const STATUS_CONFIG: Record<StoryStatus, { label: string; description: string; icon: React.ElementType }> = @@
+-const STATUS_CONFIG: Record<StoryStatus, { label: string; description: string; icon: React.ElementType }> = {
++const STATUS_CONFIG: Record<string, { label: string; description: string; icon: React.ElementType }> = {
+   pending: {
+     label: '等待中',
+     description: '魔法书正在翻到第一页',
+@@ export function GenerationProgress({ progress, isPolling = false, onRetry, className }: GenerationProgressProps) { @@
+-  const config = STATUS_CONFIG[progress.status];
+-  const Icon = config.icon;
++  const config = STATUS_CONFIG[progress.status] ?? {
++    label: '处理中',
++    description: progress.message || '正在处理...',
++    icon: Loader2,
++  };
++  const Icon = config.icon;
+*** End Patch

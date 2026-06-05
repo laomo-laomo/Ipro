@@ -1,0 +1,7 @@
+=== LLM-cached example: cmpxlle1m002vcr1vip4mbqwl (匹诺曹) ===
+Scene count: 11
+Traceback (most recent call last):
+  File "F:\IPro\apps\api\check_full_tpl.py", line 13, in <module>
+    print('  - idx=' + str(s.get('index')) + ': ' + repr(s.get('description')))
+                           ^^^^^
+AttributeError: 'str' object has no attribute 'get'

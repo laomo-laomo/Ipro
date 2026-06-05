@@ -1,0 +1,773 @@
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { z } from 'zod';
+import { generateStory as generateStoryWithAI } from '../../services/ai.service.js';
+
+interface StoryParams {
+  id: string;
+}
+
+interface SegmentParams extends StoryParams {
+  segmentId: string;
+}
+
+interface Scene {
+  index: number;
+  description: string;
+  text: string;
+}
+
+interface GenerateBody {
+  title?: string;
+  customTitle?: string;
+  characterId: string;
+}
+
+interface FromTemplateBody {
+  templateId: string;
+  templateName?: string;
+  characterId: string;
+}
+
+interface CreateBody {
+  characterId: string;
+  title?: string;
+  customTitle?: string;
+  templateId?: string;
+  templateName?: string;
+  source?: string;
+}
+interface UpdateStoryBody {
+  content?: string;
+  scenes?: Scene[];
+}
+
+interface SegmentPatchBody {
+  description?: string;
+  sceneDesc?: string;
+  text?: string;
+  content?: string;
+}
+
+const sceneSchema = z.object({
+  index: z.number().int().min(0),
+  description: z.string().min(1),
+  text: z.string().min(1),
+});
+
+const scenesArraySchema = z.array(sceneSchema);
+
+const generateSchema = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+    customTitle: z.string().min(1).max(200).optional(),
+    characterId: z.string().min(1),
+  })
+  .refine((data) => data.title || data.customTitle, {
+    message: 'title or customTitle is required',
+    path: ['title'],
+  });
+
+const fromTemplateSchema = z.object({
+  templateId: z.string().min(1),
+  templateName: z.string().min(1).max(200).optional(),
+  characterId: z.string().min(1),
+});
+
+
+const createSchema = z
+  .object({
+    characterId: z.string().min(1),
+    title: z.string().min(1).max(200).optional(),
+    customTitle: z.string().min(1).max(200).optional(),
+    templateId: z.string().min(1).optional(),
+    templateName: z.string().min(1).max(200).optional(),
+    source: z.string().max(50).optional(),
+  })
+  .refine((data) => data.title || data.customTitle || data.templateId, {
+    message: 'title, customTitle, or templateId is required',
+    path: ['title'],
+  });
+const CLASSIC_STORY_LIBRARY: Record<string, { canonicalTitle: string; scenes: Scene[] }> = {
+  灏忕孩甯? {
+    canonicalTitle: '灏忕孩甯?,
+    scenes: [
+      { index: 0, description: '娓呮櫒鐨勬湪灞嬪墠锛屽皬绾㈠附鑳岀潃瑁呮弧鏉鹃ゼ鍜屾灉閰辩殑灏忕瀛愶紝濡堝姝ｅ湪娓╂煍鍙槺濂硅矾涓婄殑娉ㄦ剰浜嬮」', text: '娓呮櫒锛屾．鏋楄竟鐨勫皬鏈ㄥ眿琚噾鑹查槼鍏夌収寰楁殩鏆栫殑銆傚皬绾㈠附鑳屽ソ灏忕瀛愶紝閲岄潰瑁呯潃鍒氱儰濂界殑鏉鹃ゼ鍜岄鐢滅殑閲庤帗鏋滈叡锛屽噯澶囧幓鐪嬫湜浣忓湪妫灄鍙︿竴澶寸殑濂跺ザ銆傚嚭闂ㄥ墠锛屽濡堝集涓嬭叞锛岃鐪熷彯鍢卞ス涓嶈绂诲紑灏忚矾锛屼篃涓嶈闅忎究鐩镐俊闄岀敓浜虹殑璇濄€傚皬绾㈠附鐐圭偣澶达紝鎶婅繖浜涜瘽鐗㈢墷璁板湪浜嗗績閲屻€? },
+      { index: 1, description: '闃冲厜娲掕惤鐨勬．鏋楀皬璺笂锛屽皬绾㈠附涓€杈硅蛋涓€杈规璧忚姳鑽夛紝杩滃鐨勫ぇ鐏扮嫾姝ｈ浣滃弸濂藉湴鍚戝ス鎼瘽', text: '涓€璺笂锛岄笩鍎垮湪鏍戞ⅱ鍞辨瓕锛岄杞昏交鍚硅繃閲庤姳锛屽皬绾㈠附鍘熸湰璧板緱寰堝紑蹇冦€傚氨鍦ㄨ繖鏃讹紝涓€鍙ぇ鐏扮嫾浠庢爲鍚庢參鎱㈣蛋鍑烘潵锛岃鍑轰竴鍓儹鎯呭弸濂界殑鏍峰瓙鍜屽ス鎵撴嫑鍛硷紝杩樻晠鎰忓じ濂圭殑灏忕孩鏂楃寰堝ソ鐪嬨€傚畠涓€杈硅璇濓紝涓€杈规兂濂楀嚭濂跺ザ瀹朵綇鍦ㄥ摢閲屻€傚皬绾㈠附鎯宠捣濡堝鐨勬彁閱掞紝娌℃湁鎶婂ザ濂跺鐨勪綅缃憡璇夊畠锛屽彧绀艰矊鍦扮偣鐐瑰ご锛岀户缁部鐫€灏忚矾寰€鍓嶈蛋銆? },
+      { index: 2, description: '灏忕孩甯芥潵鍒板ザ濂跺闂ㄥ彛锛屽彂鐜板眿瀛愭牸澶栧畨闈欙紝闂ㄧ紳鍗婃帺锛屽ス璀﹁鍦扮珯鍦ㄥ彴闃跺墠瑙傚療鍥涘懆', text: '璧颁簡寰堜箙浠ュ悗锛屽皬绾㈠附缁堜簬鏉ュ埌浜嗗ザ濂跺鐨勫皬鏈ㄥ眿鍓嶃€傚彲浠婂ぉ鐨勫眿瀛愬拰骞虫椂涓嶅お涓€鏍凤紝闂ㄦ槸鍗婃帺鐫€鐨勶紝绐楀笜涔熶竴鍔ㄤ笉鍔紝鍥涘懆瀹夐潤寰楁湁浜涘鎬€傚皬绾㈠附娌℃湁鍍忓钩鏃堕偅鏍风珛鍒绘帹闂ㄨ繘鍘伙紝鑰屾槸鍏堢珯鍦ㄩ棬鍙ｄ粩缁嗚瀵熴€傚ス瓒婄湅瓒婅寰椾笉瀵瑰姴锛屽績閲屽紑濮嬬揣寮犺捣鏉ワ紝浣嗗ス娌℃湁鎱屼贡锛岃€屾槸鍐冲畾鍏堝幓鎵鹃檮杩戝贰鏋楃殑妯靛か鍙斿彅甯繖銆? },
+      { index: 3, description: '鏋楅棿绌哄湴涓婏紝灏忕孩甯芥壘鍒板贰鏋楃殑妯靛か鍙斿彅锛岃鐪熻鏄庢儏鍐碉紝涓や汉涓€璧峰揩姝ユ湞濂跺ザ瀹惰刀鍘?, text: '灏忕孩甯芥彁鐫€绡瓙蹇璺戝埌鏋楅棿绌哄湴锛岀粓浜庢壘鍒颁簡姝ｅ湪宸℃灄鐨勬ǖ澶彅鍙斻€傚ス鎶婂ザ濂跺闂ㄥ彛濂囨€殑鎯呭舰涓€浜斾竴鍗佸湴鍛婅瘔浜嗗鏂广€傛ǖ澶彅鍙斿惉瀹屽悗锛岀珛鍒昏寰椾簨鎯呬笉绠€鍗曪紝杩炲繖瀹夋叞灏忕孩甯戒笉瑕佸鎬曪紝鐒跺悗甯︾潃濂逛竴璧疯刀鍥炲ザ濂跺銆備竴璺笂锛屽皬绾㈠附铏界劧蹇冮噷鎬︽€︾洿璺筹紝浣嗗洜涓烘湁浜洪櫔浼达紝濂逛篃鍙樺緱鏇村姞鍕囨暍浜嗐€? },
+      { index: 4, description: '濂跺ザ瀹剁殑灏忔湪灞嬮噸鏂颁寒璧锋俯鏆栫伅鍏夛紝灏忕孩甯姐€佸ザ濂跺拰妯靛か鍥村潗鍦ㄦ杈瑰垎浜澗楗硷紝绁炴儏鏀炬澗鍙堝紑蹇?, text: '鍦ㄦǖ澶彅鍙旂殑甯姪涓嬶紝濂跺ザ骞冲畨鏃犱簨锛屽皬鏈ㄥ眿閲屼篃閲嶆柊鎭㈠浜嗘俯鏆栧拰瀹夊績銆傚皬绾㈠附杩欐墠鏉句簡涓€鍙ｆ皵锛屾妸涓€璺皬蹇冨甫鏉ョ殑鏉鹃ゼ鍜屾灉閰辨憜鍒版涓婏紝璇峰ザ濂跺拰妯靛か鍙斿彅涓€璧峰垎浜€傚ザ濂惰交杞绘姳浣忓皬绾㈠附锛屽じ濂规棦鎳傜ぜ璨屽張鎳傚緱淇濇姢鑷繁銆傚皬绾㈠附涔熸槑鐧戒簡锛屽媷鏁㈠苟涓嶆槸涓€鍛抽€炲己锛岃€屾槸鍦ㄩ亣鍒板嵄闄╂椂淇濇寔鍐烽潤銆佸強鏃舵眰鍔┿€佸仛鍑鸿仾鏄庣殑鍐冲畾銆? },
+    ],
+  },
+  鐧介洩鍏富: {
+    canonicalTitle: '鐧介洩鍏富',
+    scenes: [
+      { index: 0, description: '鐜嬪鑺卞洯閲岋紝鐧介洩鍏富鍦ㄦ櫒鍏変腑涓庡皬楦熷拰鑺辨湹鐩镐即锛岀鎯呮俯鏌旂函鐪?, text: '鍦ㄤ竴搴ц缇ゅ北鍜岃姳鍥幆缁曠殑鐜嬪閲岋紝浣忕潃缇庝附鍠勮壇鐨勭櫧闆叕涓汇€傚ス鏈夊儚闆竴鏍锋磥鐧界殑鑲岃偆锛屽儚涔屾湪涓€鏍锋煍浜殑榛戝彂锛岃繕鏈変竴棰楁効鎰忓杽寰呮墍鏈変汉鐨勬俯鏌斿績銆傛棤璁烘槸瀹腑鐨勪緧濂筹紝杩樻槸绐楀彴涓婄殑灏忛笩锛岄兘鍠滄闈犺繎濂癸紝鍥犱负濂规€昏兘甯︽潵娓╂殩鍜屽畨瀹併€? },
+      { index: 1, description: '鐜嬪悗鐨勫崕涓藉娈块噷锛岄瓟闀滆楂橀珮鎸傝捣锛岀帇鍚庣鎯呴獎鍌插張涓嶅畨锛岄暅涓槧鍑虹櫧闆叕涓荤殑鍚嶅瓧', text: '鐜嬪悗铏界劧鎷ユ湁鍗庝附鐨勭帇鍐犲拰婕備寒鐨勮。瑁欙紝鍗村缁堟渶鍦ㄦ剰鑷繁鏄笉鏄笘鐣屼笂鏈€缇庣殑浜恒€傛瘡澶╋紝濂归兘浼氱珯鍦ㄩ瓟闀滃墠璇㈤棶鍚屼竴涓棶棰樸€傜洿鍒版湁涓€澶╋紝榄旈暅鍛婅瘔濂癸紝鐜嬪浗閲屾渶缇庝附鐨勪汉宸茬粡涓嶅啀鏄ス锛岃€屾槸鐧介洩鍏富銆傚珘濡掑儚闃村奖涓€鏍峰湪鐜嬪悗蹇冮噷钄撳欢锛屽ス寮€濮嬫妸鎵€鏈夋€掓皵閮芥寚鍚戜簡鏃犺緶鐨勫叕涓汇€? },
+      { index: 2, description: '妫灄娣卞锛岀櫧闆叕涓荤嫭鑷璺戣翰閬垮嵄闄╋紝鍏夌嚎閫忚繃楂樻爲娲掍笅锛屽皬鍔ㄧ墿鍥村湪濂硅韩杈?, text: '涓轰簡閫冪鐜嬪悗鐨勮揩瀹筹紝鐧介洩鍏富琚揩绂诲紑鐔熸倝鐨勭帇瀹紝鐙嚜璺戣繘浜嗚寕瀵嗙殑妫灄銆傚ス涓€璺穼璺屾挒鎾烇紝蹇冮噷鏃㈠鎬曞張闅捐繃锛屽彲妫灄閲岀殑灏忓姩鐗╀滑鍗存倓鎮勫洿鍒板ス韬竟锛屽ソ鍍忓湪瀹夋叞濂广€傜粓浜庯紝鍦ㄥぉ鑹叉笎鏆楃殑鏃跺€欙紝濂圭湅瑙佹灄涓湁涓€闂村皬灏忕殑鏈ㄥ眿锛屼豢浣涙槸鍛借繍涓哄ス鐣欎笅鐨勪竴鐐瑰厜浜€? },
+      { index: 3, description: '涓冧釜灏忕煯浜虹殑鏈ㄥ眿閲岋紝鐧介洩鍏富鍜屼竷涓皬鐭汉鍥村潗鍦ㄦ杈癸紝灞嬪唴娓╂殩鏄庝寒锛屾皵姘涘儚瀹朵竴鏍?, text: '閭ｉ棿鏈ㄥ眿鍘熸潵灞炰簬涓冧釜鍕ゅ姵鍠勮壇鐨勫皬鐭汉銆傝捣鍒濓紝浠栦滑瀵圭櫧闆叕涓荤殑鍒版潵鎰熷埌鎯婅锛屽彲褰撲粬浠惉瀹屽叕涓荤殑閬亣鍚庯紝閮芥効鎰忕暀涓嬪ス锛屼竴璧风敓娲汇€傜櫧闆叕涓诲府浠栦滑鏁寸悊鎴块棿銆佸噯澶囨櫄椁愶紝涔熼噸鏂版壘鍥炰簡涔呰繚鐨勫畨蹇冦€傚皬鏈ㄥ眿铏界劧涓嶅ぇ锛屽嵈绗竴娆¤濂规劅鍙楀埌鐪熸鍍忓涓€鏍风殑娓╂殩銆? },
+      { index: 4, description: '鐜嬪悗浼鎴愯€佸浜烘潵鍒版湪灞嬪墠锛岄€掑嚭涓€鍙矞绾㈣嫻鏋滐紝鐧介洩鍏富绔欏湪闂ㄥ彛鐘硅鲍鍦版湜鐫€濂?, text: '鐜嬪悗骞舵病鏈夋斁寮冦€傚ス浼鎴愬崠鑻规灉鐨勮€佸浜猴紝鏉ュ埌灏忔湪灞嬮棬鍓嶏紝鐢ㄦ俯鏌旂殑澹伴煶鍝勯獥鐧介洩鍏富鏀朵笅閭ｅ彧椴滅孩璇变汉鐨勮嫻鏋溿€傚杽鑹殑鍏富娌℃湁璇嗙牬璇¤锛岃交杞诲挰涓嬩簡涓€鍙ｏ紝闅忓嵆鍊掍簡涓嬪幓锛屼豢浣涜繘鍏ヤ簡闀块暱鐨勬矇鐫°€傜瓑灏忕煯浜轰滑璧跺洖鏉ユ椂锛屽彧鑳芥偛浼ゅ湴瀹堝湪濂硅韩杈广€? },
+      { index: 5, description: '闃冲厜閲嶆柊鐓ц繘妫灄锛岀櫧闆叕涓讳粠娌夌潯涓啋鏉ワ紝灏忕煯浜轰滑鍥村湪韬竟娆㈠枩涓嶅凡锛岃繙澶勫ぉ绌烘櫞鏈楁槑浜?, text: '鍚庢潵锛屽湪鐪熻瘹鐨勫畧鎶や笌鐖辨剰涓紝鐧介洩鍏富缁堜簬閲嶆柊鐫佸紑浜嗙溂鐫涖€傚皬鐭汉浠張鎯婂張鍠滐紝妫灄涔熶豢浣涗竴涓嬪瓙鎭㈠浜嗙敓鏈恒€傜粡鍘嗕簡杩欎竴鍒囦互鍚庯紝鐧介洩鍏富鏇存噦寰楃弽鎯滃杽鑹€佷俊浠讳笌闄即锛岃€岄偅浜涙浘缁忕缃╁ス鐨勯槾褰憋紝涔熺粓浜庡湪闃冲厜閲屾參鎱㈡暎鍘汇€? },
+    ],
+  },
+  鐫＄編浜? {
+    canonicalTitle: '鐫＄編浜?,
+    scenes: [
+      { index: 0, description: '鐜懓鐜嬪浗鐨勫簡鍏稿ぇ鍘呴噷锛屽浗鐜嬪拰鐜嬪悗鎶辩潃鍒氬嚭鐢熺殑灏忓叕涓伙紝浠欏瓙浠洿缁曞洓鍛ㄩ€佷笂绁濈锛屾暣涓娈胯椴滆姳涓庣儧鍏夎鐐瑰緱鍗庝附娓╂殩', text: '寰堜箙浠ュ墠锛屽湪寮€婊＄帿鐟扮殑鐜嬪浗閲岋紝鍥界帇鍜岀帇鍚庣粓浜庤繋鏉ヤ簡浠栦滑鐩兼湜宸蹭箙鐨勫皬鍏富銆備负浜嗗簡绁濆ス鐨勫嚭鐢燂紝鐜嬪閲屼妇琛屼簡涓€鍦虹洓澶х殑瀹翠細锛屽杽鑹殑浠欏瓙浠篃涓€涓€鍓嶆潵锛岄€佺粰灏忓叕涓昏仾鎱с€佺編涓姐€佸杽鑹拰蹇箰鐨勭绂忋€傛暣涓娈块噷绗戝０涓嶆柇锛屽ぇ瀹堕兘鐩镐俊锛岃繖浣嶅皬鍏富浼氬湪鐖变笌鍏夋槑涓垢绂忔垚闀裤€? },
+      { index: 1, description: '瀹翠細鏈€鐑椆鐨勬椂鍊欙紝涓€浣嶇鎯呭啺鍐风殑榛戣。浠欏瓙绐佺劧鍑虹幇鍦ㄥぇ鍘呴棬鍙ｏ紝浼椾汉鎯婅鍦板洖澶达紝鐜嬪姘旀皼鐬棿鍙樺緱绱у紶', text: '灏卞湪瀹翠細鏈€鐑椆鐨勬椂鍊欙紝涓€浣嶆病鏈夊彈鍒伴個璇风殑榛戣。浠欏瓙绐佺劧闂繘浜嗗ぇ鍘呫€傚ス鍥犱负鑷繁琚仐蹇樿€屾劋鎬掍笉宸诧紝鍦ㄤ紬浜洪渿鎯婄殑鐩厜涓鍑轰簡鍙€曠殑璇呭拻锛氱瓑灏忓叕涓婚暱鍒板崄鍏瞾鏃讹紝浼氳绾洪敜鍒轰激鎵嬫寚锛屼粠姝ら櫡鍏ユ矇鐫°€傚ぇ鍘呴噷绔嬪埢瀹夐潤涓嬫潵锛屽浗鐜嬪拰鐜嬪悗鏃㈡儕鎱屽張闅捐繃銆傚垢濂芥渶鍚庝竴浣嶅杽鑹殑浠欏瓙鍙婃椂琛ヤ笂绁濈锛屾妸鍙€曠殑缁撳眬鏀规垚浜嗘矇鐫★紝鑰屼笉鏄案杩滃け鍘荤敓鍛姐€? },
+      { index: 2, description: '闀垮ぇ鐨勫叕涓诲湪鍩庡牎鑺卞洯涓庡洖寤婇棿浼橀泤鐢熸椿锛屽浗鐜嬪懡浜烘敹璧锋墍鏈夌汉杞︼紝瀹鏄庝寒瀹侀潤锛岀帿鐟拌姳鍦ㄨ姳鍥噷鐩涘紑', text: '涓轰簡淇濇姢鍏富锛屽浗鐜嬩笅浠ゆ敹璧风帇鍥介噷鎵€鏈夌殑绾鸿溅锛屼笉璁╀换浣曚汉鍐嶇瀹冧滑銆傛棩瀛愪竴骞村勾杩囧幓锛屽皬鍏富娓愭笎闀挎垚浜嗕竴浣嶆俯鏌斿杽鑹殑灏戝コ銆傚ス鍠滄鍦ㄧ帿鐟拌姳鍥噷鏁ｆ锛屼篃鍠滄鍚笩鍎垮敱姝岋紝瀵瑰煄鍫″鐨勪笘鐣屽厖婊′簡濂藉銆傝櫧鐒剁帇瀹噷鐨勬瘡涓汉閮藉湪灏忓績瀹堟姢鐫€濂癸紝鍙偅涓彜鑰佺殑璇呭拻濮嬬粓鍍忎竴鐗囩湅涓嶈鐨勯槾褰憋紝鎮勬倓鎮湪澶у蹇冨ご銆? },
+      { index: 3, description: '鍗佸叚宀佺敓鏃ヨ繖澶╋紝鍏富鐙嚜璧颁笂瀹夐潤鐨勯珮濉旓紝鍦ㄦ棫闃佹ゼ閲岀湅瑙佷竴浣嶈€佸浜哄拰涓€鏋跺彜鑰佺汉杞︼紝绐楄竟鍏夌嚎瀹夐潤鑰岀绉?, text: '鍦ㄥ叕涓诲崄鍏瞾鐢熸棩閭ｅぉ锛屽ス鐙嚜璧拌繘浜嗗钩鏃跺緢灏戞湁浜哄幓鐨勯珮濉斻€傞珮濉旈《涓婄殑灏忛榿妤奸噷锛岀珶鎽嗙潃涓€鏋跺彜鑰佺殑绾鸿溅锛岃繕鏈変竴浣嶉檶鐢熺殑鑰佸浜烘鎱㈡參绾虹嚎銆傚叕涓讳粠鏉ユ病鏈夎杩囪繖鏍风殑涓滆タ锛屼笉鐢卞緱濂藉鍦伴潬杩戙€傚氨鍦ㄥス浼告墜杞昏交纰板埌绾洪敜鐨勪竴鐬棿锛屾墜鎸囪鍒轰簡涓€涓嬶紝娌夌潯鐨勮瘏鍜掔粓浜庡湪杩欎竴鍒绘倓鎮勯檷涓淬€? },
+      { index: 4, description: '鍏富鍦ㄩ珮濉斾腑娌夋矇鐫″幓锛岀帇瀹笂涓嬫墍鏈変汉涔熶竴璧烽櫡鍏ユ矇鐫★紝鍩庡牎澶栬敺钖囪棨钄撳眰灞傚寘瑁癸紝鏃堕棿浠夸經鍋滀綇', text: '鍏富杞昏交闂笂浜嗙溂鐫涳紝鍊掑湪鏌旇蒋鐨勬瀛愭梺娌夋矇鐫″幓銆備笌姝ゅ悓鏃讹紝鏁翠釜鐜嬪浠夸經閮借榄旀硶绗肩僵锛氬浗鐜嬨€佺帇鍚庛€佷緧濂炽€佸＋鍏碉紝鐢氳嚦鍘ㄦ埧閲屾蹇欑鐨勫帹甯堝拰瑙掕惤閲屾墦鐩圭殑灏忕嫍锛屼篃鍏ㄩ兘涓€璧风潯鐫€浜嗐€傚煄鍫″锛岃敺钖囪棨钄撲笉鏂攢鐖敓闀匡紝鎶婇珮濉斻€佸澧欏拰鑺卞洯涓€灞傚眰鍖呰９璧锋潵锛屼豢浣涙妸鏁翠釜鐜嬪浗灏佸瓨鍦ㄤ簡涓€涓极闀垮畨闈欑殑姊﹂噷銆? },
+      { index: 5, description: '璁稿骞村悗锛屼竴浣嶅勾杞荤帇瀛愮┛杩囪敺钖囪崋妫樿繘鍏ユ矇鐫″煄鍫★紝鍦ㄦ煍鍜屽厜绾夸腑鏉ュ埌鍏富韬竟锛屾暣涓帇瀹噯澶囬噸鏂拌嫃閱?, text: '璁稿骞翠互鍚庯紝涓€浣嶅勾杞荤殑鐜嬪瓙鍚浜嗘矇鐫″叕涓荤殑浼犺锛屽喅蹇冧翰鑷墠寰€閭ｅ骇琚帿鐟拌鐩栫殑鍙よ€佸煄鍫°€傚綋浠栭紦璧峰媷姘旂┛杩囧眰灞傝崋妫樻椂锛屽杩硅埇鍦帮紝钄疯枃钘よ敁鑷姩璁╁嚭浜嗕竴鏉￠亾璺€傜帇瀛愯蛋杩涘瘋闈欑殑瀹锛岀粓浜庡湪楂樺涓鍒颁簡浠嶅儚鐔熺潯涓€鑸畨闈欑編涓界殑鍏富銆傚氨鍦ㄤ粬娓╂煍鍛煎敜濂圭殑鏃跺€欙紝鍏富鎱㈡參鐫佸紑浜嗙溂鐫涳紝鏁翠釜鐜嬪涔熶竴鐐圭偣鑻忛啋杩囨潵銆傞槼鍏夐噸鏂扮収杩涘煄鍫★紝閽熷０鍐嶆鍝嶈捣锛岀帿鐟扮帇鍥界粓浜庢仮澶嶄簡绗戝０涓庣敓鏈恒€? },
+    ],
+  },
+  涓夊彧灏忕尓: {
+    canonicalTitle: '涓夊彧灏忕尓',
+    scenes: [
+      { index: 0, description: '涓夊彧灏忕尓绔欏湪闃冲厜鏄庝寒鐨勮崏鍦颁笂鍟嗛噺绂诲寤烘埧锛岃繙澶勬湁鐢伴噹鍜屾爲鏋楋紝姘旀皼杞诲揩鍙堟湡寰?, text: '涓夊彧灏忕尓鎱㈡參闀垮ぇ浜嗭紝濡堝鍛婅瘔浠栦滑锛屾槸鏃跺€欑寮€瀹讹紝鍘荤洊灞炰簬鑷繁鐨勬埧瀛愶紝瀛︿細鐙珛鐢熸椿銆備笁鍏勫紵绔欏湪鑽夊湴涓婏紝涓€杈规湜鐫€杩滃鐨勭敯閲庡拰鏍戞灄锛屼竴杈瑰叴濂嬪湴璁ㄨ鑷繁鏈潵鐨勫浼氭槸浠€涔堟牱瀛愩€傝€佸ぇ鎯冲揩鐐瑰畬宸ワ紝鑰佷簩鍠滄杞诲阀婕備寒锛岃€岃€佷笁鍒欏笇鏈涚洊涓€搴х湡姝ｇ粨瀹炪€佽兘鎸￠閬块洦鐨勬埧瀛愩€? },
+      { index: 1, description: '鑰佸ぇ鐢ㄧɑ鑽夋惌鎴垮瓙锛岃€佷簩鐢ㄦ湪鏉垮缓鎴垮瓙锛岃€佷笁鍦ㄤ竴鏃佽鐪熸惉鐮栫爩澧欙紝涓夌鎴垮瓙瀵规瘮椴滄槑', text: '娌¤繃澶氫箙锛岃€佸ぇ鎵炬潵涓€澶ф崋绋昏崏锛屽緢蹇氨鎼ソ浜嗕竴搴ц崏鎴垮瓙锛涜€佷簩涔熸惉鏉ヤ簡鏈ㄦ澘鍜屾爲鏋濓紝涓嶄竴浼氬効灏卞缓璧蜂簡涓€搴ф湪鎴垮瓙銆傚彧鏈夎€佷笁涓嶆厡涓嶅繖锛屼竴鍧椾竴鍧楀湴鎼潃鐮栧ご锛岃鐪熷湴鐮屽銆佸姞鍥哄眿椤讹紝杩樹粩缁嗘鏌ユ瘡涓€鎵囩獥鍜屾瘡涓€鎵囬棬銆備袱涓摜鍝ラ兘绗戜粬鍔ㄤ綔澶參锛屽彲鑰佷笁鍙槸浣庡ご缁х画鍔姏銆? },
+      { index: 2, description: '澶х伆鐙兼潵鍒拌崏鎴垮墠鐢ㄥ姏鍚规皵锛岃崏鎴挎憞鏅冩暎寮€锛岀涓€鍙皬鐚儕鎱屽湴璺戝悜鏈ㄦ埧', text: '鏈変竴澶╋紝涓€鍙張楂樺張澹殑澶х伆鐙奸椈鐫€鍛抽亾鎵惧埌浜嗗皬鐚滑鐨勬柊鎴垮瓙銆傚畠鍏堟潵鍒拌崏鎴垮墠锛岄湶鍑哄嚩宸村反鐨勭瑧瀹癸紝澶у０濞佽儊鑰佸ぇ寮€闂ㄣ€傝€佸ぇ鍚撳緱鐩村彂鎶栵紝姝绘椤朵綇闂ㄦ澘銆備簬鏄紝澶х伆鐙奸紦璧疯叜甯瓙锛岀寷鍦颁竴鍚癸紝鑴嗗急鐨勮崏鎴夸竴涓嬪瓙琚惞寰楀洓澶勬暎寮€锛岃€佸ぇ鍙ソ鎷煎懡閫冨悜鑰佷簩鐨勬湪鎴裤€? },
+      { index: 3, description: '澶х伆鐙煎張鍚瑰灝鏈ㄦ埧锛屼袱鍙皬鐚竴璧峰啿鍚戣繙澶勭ǔ鍥虹殑鐮栨埧锛岃€佷笁鍦ㄩ棬鍙ｇ劍鎬ユ帴搴?, text: '澶х伆鐙肩揣鎺ョ潃杩藉埌鏈ㄦ埧鍓嶏紝鍙堝紑濮嬬敤鍔涘惞姘斻€傛湪鏉垮仛鐨勬埧瀛愯櫧鐒舵瘮鑽夋埧缁撳疄涓€鐐癸紝鍙繕鏄粡涓嶄綇瀹冧竴娆″張涓€娆＄殑鐚涘惞锛屽緢蹇篃鍙戝嚭浜嗗挴鍚卞挴鍚辩殑澹伴煶锛屾渶鍚庢暣涓€掑涓嬫潵銆傝€佸ぇ鍜岃€佷簩鍚撳緱杩炲繖鏈濊€佷笁鐨勭爾鎴胯窇鍘伙紝鑰佷笁鏃╂棭鎶婇棬鎵撳紑锛屾妸涓や釜鍝ュ摜杩庝簡杩涘幓锛岀劧鍚庤繀閫熸妸闂ㄧ獥閿佸ソ銆? },
+      { index: 4, description: '鍧氬浐鐨勭爾鎴垮湪椋庝腑绋崇ǔ绔欑珛锛屼笁鍙皬鐚湪灞嬮噷绱у紶鍙堝洟缁擄紝澶х伆鐙煎湪灞嬪姘旀€ヨ触鍧?, text: '杩欎竴娆★紝澶х伆鐙间娇鍑轰簡鍏ㄨ韩鐨勫姏姘旓紝涓嶅仠鍦板惞鍟婂惞锛屽彲鐮栨埧鍙槸寰井闇囧姩浜嗕竴涓嬶紝渚濇棫绋崇ǔ鍦扮珯鍦ㄥ師鍦般€傚眿閲岀殑涓夊彧灏忕尓铏界劧绱у紶寰楁姳鍦ㄤ竴璧凤紝鍗寸涓€娆＄湡姝ｆ槑鐧戒簡缁撳疄鍜岃€愬績鐨勯噸瑕併€傚ぇ鐏扮嫾姘斿緱鍥㈠洟杞紝鍗存€庝箞涔熻繘涓嶅幓锛屽彧鑳藉湪灞嬪鏉ュ洖鎵撹浆銆? },
+      { index: 5, description: '椋庡钩娴潤鍚庯紝涓夊彧灏忕尓绔欏湪鐮栨埧鍓嶉噸鏂版暣鐞嗛櫌瀛愶紝闃冲厜娲掓弧鑽夊湴锛屽厔寮熶笁浜洪湶鍑鸿交鏉剧瑧瀹?, text: '绛夊嵄闄╃粓浜庤繃鍘伙紝涓夊彧灏忕尓涓€璧疯蛋鍑虹爾鎴匡紝鐪嬬潃浠嶇劧鐗㈢墷绔欑潃鐨勫眿瀛愶紝蹇冮噷鏃㈠簡骞稿張浣╂湇鑰佷笁鐨勫潥鎸併€備袱涓摜鍝ヤ笉濂芥剰鎬濆湴鎵胯锛岃嚜宸变箣鍓嶅彧椤剧潃鍥惧揩锛屾病鏈夎鐪熸妸浜嬫儏鍋氬ソ銆備粠閭ｄ互鍚庯紝涓夊厔寮熶竴璧锋暣鐞嗛櫌瀛愶紝涔熷浼氫簡鍋氫簨涓嶈兘鍙眰鐪佸姏鍜屾柟渚匡紝鑰岃璁ょ湡銆佽笍瀹炪€佹妸姣忎竴姝ラ兘鍋氬ソ銆? },
+    ],
+  },
+  鐏板濞? {
+    canonicalTitle: '鐏板濞?,
+    scenes: [
+      { index: 0, description: '娓呮櫒鐨勬棫瀹呴櫌閲岋紝鐏板濞樼┛鐫€鏈寸礌琛ｈ鎵撴壂搴櫌锛岀獥杈规憜鐫€濂逛翰鎵嬬収鏂欑殑鑺憋紝绁炴儏娓╂煍瀹夐潤', text: '寰堜箙浠ュ墠锛屽湪涓€搴ф棫瀹呴櫌閲岋紝浣忕潃鍠勮壇鐨勭伆濮戝銆傝櫧鐒跺ス姣忓ぉ閮借蹇欑潃鎵撴壂鎴块棿銆佹暣鐞嗛櫌瀛愩€佺収椤惧鍔★紝鍙ス浠庢潵娌℃湁鎶辨€ㄨ繃銆傚繖纰屼箣浣欙紝濂规€讳細鎮勬倓鐓ф枡绐楄竟鐨勫皬鑺憋紝涔熶細鎶ご鐪嬬湅澶╀笂鐨勪簯锛屽績閲屼竴鐩翠繚鐣欑潃娓╂煍鑰屾槑浜殑甯屾湜銆? },
+      { index: 1, description: '鐜嬪浣胯€呴€佹潵鑸炰細閭€璇凤紝缁ф瘝鍜屽濮愪滑鍏村鍦拌瘯绌垮崕涓界ぜ鏈嶏紝鐏板濞樼珯鍦ㄤ竴鏃佸畨闈欑湅鐫€', text: '鏈変竴澶╋紝鐜嬪浼犳潵娑堟伅锛岀帇瀛愬皢涓惧姙鐩涘ぇ鐨勮垶浼氾紝閭€璇峰煄閲屾墍鏈夐€傞緞濂冲鍓嶅幓鍙傚姞銆傜户姣嶅拰涓や釜濮愬绔嬪埢楂樺叴寰楀繖鎴愪竴鍥紝鎸戦€夎瀛愩€佺彔瀹濆拰闉嬪瓙锛屾仺涓嶅緱椹笂灏卞嚭鍙戙€傜伆濮戝涔熸倓鎮勬湡寰呰繃锛屽彲濂圭煡閬擄紝鑷繁澶氬崐鍙兘鐣欏湪瀹堕噷锛岀湅鐫€鍒汉濂斿悜鐑椆涓庡厜浜€? },
+      { index: 2, description: '澶滄櫄灏嗚繎锛岀伆濮戝鐙嚜鐣欏湪绌鸿崱闄㈠瓙閲岋紝鐪肩湺寰孩锛涗粰濂虫暀姣嶅湪鏌斿拰鍏夎姃涓嚭鐜帮紝鍛ㄥ洿闂儊榄旀硶鏄熺偣', text: '绛夊ぇ瀹堕兘鍘诲噯澶囪垶浼氭椂锛岀伆濮戝涓€涓汉鐣欏湪瀹夐潤鐨勯櫌瀛愰噷锛屽績閲屽繊涓嶄綇娉涜捣涓€闃甸毦杩囥€傚氨鍦ㄨ繖鏃讹紝涓€閬撴俯鏌旂殑鍏変寒鍦ㄥ鑹蹭腑鍑虹幇锛屼粰濂虫暀姣嶆潵鍒颁簡濂归潰鍓嶃€傚ス鐪嬭鐏板濞樼殑鍠勮壇涓庡姫鍔涳紝浜庢槸杞昏交鎸ュ姩榄旀潠锛屾妸鍗楃摐鍙樻垚椹溅锛屾妸鏃ц。瑁冲彉鎴愪簡闂棯鍙戝厜鐨勭ぜ鏈嶏紝涔熼€佺粰濂逛竴鍙屾櫠鑾圭殑鐜荤拑闉嬨€? },
+      { index: 3, description: '鐏伀杈夌厡鐨勭帇瀹垶浼氶噷锛岀伆濮戝绌跨潃閾剁櫧绀兼湇缂撴璧板叆澶у巺锛岀帇瀛愬湪浜虹兢涓濂瑰惛寮曪紝瀹惧绾风悍鍥炲ご', text: '褰撶伆濮戝涔樼潃椹溅鏉ュ埌鐜嬪鏃讹紝鏁翠釜澶у巺閮藉洜涓哄ス鐨勫埌鏉ヨ€屽畨闈欎簡涓€鐬€傚ス绌跨潃杞荤泩鐨勭ぜ鏈嶏紝鍍忔湀鍏変竴鏍锋槑浜紭闆咃紝鐜嬪瓙涔熺珛鍒昏濂瑰惛寮曚綇浜嗐€傚湪鑸炴洸澹伴噷锛屼袱浜轰竴璧疯烦鑸炪€佷氦璋堬紝鐏板濞樼涓€娆℃劅鍙楀埌鑷繁涔熻兘鍫傚爞姝ｆ鍦扮珯鍦ㄨ€€鐪肩伅鍏変笅锛岃娓╂煍鍦版敞瑙嗗拰鐝嶆儨銆? },
+      { index: 4, description: '鍗堝閽熷０鍝嶈捣锛岀伆濮戝鎻愯捣瑁欐憜濂斾笅鍙伴樁锛屼竴鍙幓鐠冮瀷閬楄惤鍦ㄨ韩鍚庯紝鐜嬪瓙寮叞鎷捐捣', text: '鍙氨鍦ㄦ渶蹇箰鐨勬椂鍊欙紝鍗堝鐨勯挓澹扮獊鐒跺搷璧枫€傜伆濮戝鎯宠捣浠欏コ鏁欐瘝鐨勬彁閱掞紝杩炲繖杞韩璺戝嚭澶у巺銆傚ス鍖嗗寙璺戜笅鍙伴樁鏃讹紝涓€鍙幓鐠冮瀷涓嶅皬蹇冭惤鍦ㄤ簡鍦颁笂銆傜帇瀛愯拷鍒伴棬鍙ｏ紝鍙潵寰楀強鎹¤捣閭ｅ彧鏅惰幑鍓旈€忕殑闉嬪瓙锛屽嵈娌℃湁璧朵笂濂圭寮€鐨勯┈杞︺€? },
+      { index: 5, description: '鏄庝寒鐨勫鍘呴噷锛岀伆濮戝绌夸笂鍒氬ソ鍚堣剼鐨勭幓鐠冮瀷锛岀帇瀛愰湶鍑烘鍠滅鎯咃紝绐楀闃冲厜鐓ц繘灞嬪唴', text: '鍚庢潵锛岀帇瀛愬甫鐫€閭ｅ彧鐜荤拑闉嬭蛋閬嶅叏鍩庯紝鎯虫壘鍒伴偅浣嶅湪鑸炰細涓婁笌鑷繁鍏辫垶鐨勫濞樸€傝澶氫汉閮藉皾璇曡繃锛屽嵈娌℃湁涓€涓汉鑳界┛涓娿€傜洿鍒版潵鍒扮伆濮戝瀹讹紝闉嬪瓙绋崇ǔ鍦扮┛鍦ㄤ簡濂圭殑鑴氫笂锛屽彟涓€鍙瀷涔熻濂硅交杞绘嬁浜嗗嚭鏉ャ€傞偅涓€鍒伙紝鎵€鏈夎浼氬拰杞昏閮借鎵撶牬浜嗐€傜伆濮戝缁堜簬杩庢潵浜嗗睘浜庤嚜宸辩殑骞哥锛屼篃鏄庣櫧浜嗙湡姝ｇ弽璐电殑锛屼笉鍙槸缇庝附鐨勮。瑁筹紝鑰屾槸濮嬬粓娌℃湁琚嫤闅剧（鐏殑鍠勮壇鍜屽笇鏈涖€? },
+    ],
+  },
+};
+
+function normalizeStoryTitle(title: string): string {
+  return title.replace(/[銆娿€?鈥溾€漒s]/g, '').trim();
+}
+
+function resolveClassicStory(title: string): { canonicalTitle: string; scenes: Scene[] } | null {
+  const normalized = normalizeStoryTitle(title);
+  for (const [key, value] of Object.entries(CLASSIC_STORY_LIBRARY)) {
+    if (normalizeStoryTitle(key) === normalized || normalizeStoryTitle(value.canonicalTitle) === normalized) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function isClassicStoryTitle(title: string): boolean {
+  return resolveClassicStory(title) !== null;
+}
+
+function buildFallbackTemplate(title: string): { content: string; scenes: Scene[] } {
+  const classicStory = resolveClassicStory(title);
+  if (classicStory) {
+    return {
+      content: classicStory.scenes.map((scene) => scene.text).join('\n\n'),
+      scenes: classicStory.scenes,
+    };
+  }
+
+  const normalizedTitle = title.trim();
+  const scenes: Scene[] = [
+    { index: 0, description: `${normalizedTitle}鐨勪富瑙掑湪娓╂殩娓呮櫒鍑哄彂锛屽績閲屽甫鐫€鏈熷緟涓庝竴鐐圭偣绱у紶`, text: `娓呮櫒锛?{normalizedTitle}鐨勪富瑙掔珯鍦ㄧ獥鍓嶏紝鏈涚潃鍒氬垰浜捣鏉ョ殑澶╃┖锛屽績閲岃鐫€涓€涓噸瑕佺殑鐩爣銆俆A鐭ラ亾锛岃繖涓€澶╀笉浼氬儚骞冲父閭ｆ牱绠€鍗曪紝浣嗕篃姝ｅ洜涓哄姝わ紝杩欒稛鏃呯▼鎵嶆樉寰楁牸澶栫壒鍒€俙 },
+    { index: 1, description: `鏃呴€斾腑锛屼富瑙掗亣鍒颁簡鏂扮殑浼欎即鍜屾剰鏂欎箣澶栫殑闅鹃锛屽懆鍥存櫙璞″厖婊″彉鍖朻, text: `鍑哄彂娌″涔咃紝涓昏灏遍亣瑙佷簡涓€浣嶉渶瑕佸府鍔╃殑鏂版湅鍙嬨€備笌姝ゅ悓鏃讹紝涓€閬撴剰鏂欎箣澶栫殑闅鹃涔熸倓鎮勫嚭鐜板湪鐪煎墠銆備富瑙掓病鏈夋€ョ潃鎶辨€紝鑰屾槸鍋滀笅鏉ヨ鐪熻瀵燂紝鍔姏寮勬槑鐧戒簨鎯呯湡姝ｅ洶闅剧殑鍦版柟銆俙 },
+    { index: 2, description: `涓昏鍜屼紮浼翠竴璧峰皾璇曡В鍐抽棶棰橈紝杩囩▼涓湁澶辫触銆佹湁鐘硅鲍锛屼絾涔熸湁鏂扮殑鍙戠幇`, text: `鎺ヤ笅鏉ョ殑璺苟涓嶉『鍒┿€備富瑙掑拰浼欎即璇曚簡涓€涓姙娉曪紝鍙堟崲浜嗗彟涓€涓姙娉曪紝涓棿涔熼亣鍒拌繃澶辫鍜岀姽璞€傚彲姣忎竴娆″仠涓嬫潵閲嶆柊鎬濊€冿紝涓昏閮借兘浠庡け璐ラ噷鎵惧埌鏂扮殑绾跨储锛屼篃鎱㈡參瀛︿細浜嗘洿鑰愬績銆佹洿鍕囨暍鍦伴潰瀵规寫鎴樸€俙 },
+    { index: 3, description: `鏁呬簨杩涘叆杞姌锛屼富瑙掔粓浜庣湅娓呴棶棰樻牳蹇冿紝骞朵綔鍑洪噸瑕侀€夋嫨`, text: `灏卞湪浜嬫儏鏈€璁╀汉鐫€鎬ョ殑鏃跺€欙紝涓昏蹇界劧鏄庣櫧浜嗛棶棰樼殑鍏抽敭銆傜湡姝ｉ渶瑕佹敼鍙樼殑锛屼笉鍙槸鐪煎墠鐨勫眬闈紝杩樻湁鑷繁闈㈠鍥伴毦鏃剁殑鏂瑰紡銆備簬鏄紝TA鍋氬嚭浜嗕竴涓噸瑕佸喅瀹氾紝涔熻鍛ㄥ洿鐨勪竴鍒囧紑濮嬫倓鎮勬湞鐫€鏇村ソ鐨勬柟鍚戣浆鍔ㄣ€俙 },
+    { index: 4, description: `澶曢槼涓嬶紝浜嬫儏鍦嗘弧瑙ｅ喅锛屼富瑙掑拰浼欎即鍒嗕韩鎴愭灉锛屼篃鏀惰幏浜嗘垚闀縛, text: `鍒颁簡鍌嶆櫄锛屾墍鏈夊姫鍔涚粓浜庢湁浜嗘俯鏆栫殑缁撴灉銆備富瑙掑拰浼欎即涓€璧风湅鐫€浜嬫儏琚『鍒╄В鍐筹紝蹇冮噷鍏呮弧浜嗚交鏉惧拰鍠滄偊銆俆A涔熺涓€娆＄湡姝ｆ槑鐧斤紝鎴愰暱骞朵笉鏄竴涓嬪瓙鍙樺緱浜嗕笉璧凤紝鑰屾槸鍦ㄦ瘡涓€娆¤鐪熷皾璇曘€佹瘡涓€娆℃効鎰忓府鍔╁埆浜烘椂锛屾參鎱㈠彉鎴愭洿濂界殑鑷繁銆俙 },
+  ];
+
+  return {
+    content: scenes.map((scene) => scene.text).join('\n\n'),
+    scenes,
+  };
+}
+function parseScenes(raw: string | null | undefined): Scene[] {
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function toSceneArray(input: any[]): Scene[] {
+  return input.map((item, index) => ({
+    index: typeof item?.index === 'number' ? item.index : index,
+    description: item?.description || item?.sceneDesc || item?.title || `绗?${index + 1} 骞昤,
+    text: item?.text || item?.content || '',
+  }));
+}
+
+function parseSegmentIndex(segmentId: string): number | null {
+  const exactNumber = Number(segmentId);
+  if (Number.isInteger(exactNumber) && exactNumber >= 0) {
+    return exactNumber;
+  }
+
+  const match = segmentId.match(/(\d+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const index = Number(match[1]);
+  return Number.isInteger(index) && index >= 0 ? index : null;
+}
+
+async function getCharacterDescription(
+  fastify: FastifyInstance,
+  characterId: string
+): Promise<string> {
+  const character = await fastify.prisma.character.findUnique({
+    where: { id: characterId },
+  });
+
+  if (!character) {
+    return '涓€涓彲鐖辩殑灏忔湅鍙?;
+  }
+
+  if (character.featureDesc) {
+    return character.featureDesc;
+  }
+
+  if (character.stylizedPhotoUrl) {
+    return '涓€涓互鎻掔敾褰㈣薄涓轰富瑙?;
+  }
+
+  return '涓€涓彲鐖辩殑灏忔湅鍙?;
+}
+
+function storyResponse(story: any) {
+  return {
+    ...story,
+    scenes: parseScenes(story.scenes),
+  };
+}
+
+export async function storyRoutes(fastify: FastifyInstance) {
+  fastify.get('/templates', async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const templates = await fastify.prisma.storyTemplate.findMany({
+        where: { status: 'active' },
+        select: {
+          id: true,
+          title: true,
+          cover: true,
+          scenes: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      const result = templates.map((template) => ({
+        id: template.id,
+        title: template.title,
+        cover: template.cover,
+        sceneCount: parseScenes(template.scenes).length,
+      }));
+
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({
+        success: false,
+        message: 'Failed to fetch templates',
+      });
+    }
+  });
+
+  fastify.post<{ Body: CreateBody }>('/create', async (request, reply) => {
+    const userId = request.user?.id;
+    if (!userId) {
+      return reply.status(401).send({ success: false, message: 'Unauthorized' });
+    }
+
+    const parseResult = createSchema.safeParse(request.body);
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        success: false,
+        message: 'Invalid request body',
+        errors: parseResult.error.errors,
+      });
+    }
+
+    const { characterId, templateId, templateName, source: _source } = parseResult.data;
+
+    const character = await fastify.prisma.character.findFirst({
+      where: { id: characterId, userId },
+    });
+
+    if (!character) {
+      return reply.status(404).send({ success: false, message: 'Character not found' });
+    }
+
+    try {
+      let title = parseResult.data.title || parseResult.data.customTitle || '';
+
+      if (!title && templateId) {
+        const template = await fastify.prisma.storyTemplate.findUnique({
+          where: { id: templateId },
+        });
+
+        title = template?.title || templateName || templateId;
+      }
+
+      const characterDesc = await getCharacterDescription(fastify, characterId);
+      const source = templateId ? 'template' : 'custom';
+
+      let storyData: { content: string; scenes: Scene[] };
+      try {
+        storyData = isClassicStoryTitle(title) ? buildFallbackTemplate(title) : await generateStoryWithAI(title, characterDesc);
+      } catch (error) {
+        fastify.log.warn({ error: error instanceof Error ? error.message : error, title, templateId, classic: isClassicStoryTitle(title) }, '[Story] Unified AI generation failed, using fallback story');
+        storyData = buildFallbackTemplate(title);
+      }
+
+      const story = await fastify.prisma.story.create({
+        data: {
+          userId,
+          characterId,
+          title,
+          content: storyData.content,
+          scenes: JSON.stringify(storyData.scenes),
+          source,
+          status: 'draft',
+        },
+      });
+
+      return {
+        success: true,
+        data: {
+          storyId: story.id,
+          title: story.title,
+          content: story.content,
+          scenes: parseScenes(story.scenes),
+          status: story.status,
+        },
+      };
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ success: false, message: 'Failed to create story' });
+    }
+  });
+  fastify.post<{ Body: GenerateBody }>('/generate', async (request, reply) => {
+    const userId = request.user?.id;
+    if (!userId) {
+      return reply.status(401).send({ success: false, message: 'Unauthorized' });
+    }
+
+    const parseResult = generateSchema.safeParse(request.body);
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        success: false,
+        message: 'Invalid request body',
+        errors: parseResult.error.errors,
+      });
+    }
+
+    const { characterId } = parseResult.data;
+    const title = parseResult.data.title || parseResult.data.customTitle!;
+
+    const character = await fastify.prisma.character.findFirst({
+      where: { id: characterId, userId },
+    });
+
+    if (!character) {
+      return reply.status(404).send({ success: false, message: 'Character not found' });
+    }
+
+    try {
+      const characterDesc = await getCharacterDescription(fastify, characterId);
+
+      let storyData: { content: string; scenes: Scene[] };
+      try {
+        storyData = isClassicStoryTitle(title) ? buildFallbackTemplate(title) : await generateStoryWithAI(title, characterDesc);
+      } catch (error) {
+        fastify.log.warn({ error: error instanceof Error ? error.message : error, title, classic: isClassicStoryTitle(title) }, '[Story] AI generation failed, using fallback story');
+        storyData = buildFallbackTemplate(title);
+      }
+
+      const story = await fastify.prisma.story.create({
+        data: {
+          userId,
+          characterId,
+          title,
+          content: storyData.content,
+          scenes: JSON.stringify(storyData.scenes),
+          source: 'custom',
+          status: 'draft',
+        },
+      });
+
+      return {
+        success: true,
+        data: {
+          storyId: story.id,
+          title: story.title,
+          content: story.content,
+          scenes: parseScenes(story.scenes),
+          status: story.status,
+        },
+      };
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ success: false, message: 'Failed to generate story' });
+    }
+  });
+
+  fastify.post<{ Body: FromTemplateBody }>('/from-template', async (request, reply) => {
+    const userId = request.user?.id;
+    if (!userId) {
+      return reply.status(401).send({ success: false, message: 'Unauthorized' });
+    }
+
+    const parseResult = fromTemplateSchema.safeParse(request.body);
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        success: false,
+        message: 'Invalid request body',
+        errors: parseResult.error.errors,
+      });
+    }
+
+    const { templateId, templateName, characterId } = parseResult.data;
+
+    const character = await fastify.prisma.character.findFirst({
+      where: { id: characterId, userId },
+    });
+
+    if (!character) {
+      return reply.status(404).send({ success: false, message: 'Character not found' });
+    }
+
+    try {
+      const template = await fastify.prisma.storyTemplate.findUnique({
+        where: { id: templateId },
+      });
+
+      const title = template?.title || templateName || templateId;
+      const characterDesc = await getCharacterDescription(fastify, characterId);
+
+      let storyData: { content: string; scenes: Scene[] };
+      try {
+        storyData = isClassicStoryTitle(title) ? buildFallbackTemplate(title) : await generateStoryWithAI(title, characterDesc);
+      } catch (error) {
+        fastify.log.warn({ error: error instanceof Error ? error.message : error, title, templateId, classic: isClassicStoryTitle(title) }, '[Story] Template AI generation failed, using fallback story');
+        storyData = buildFallbackTemplate(title);
+      }
+
+      const story = await fastify.prisma.story.create({
+        data: {
+          userId,
+          characterId,
+          title,
+          content: storyData.content,
+          scenes: JSON.stringify(storyData.scenes),
+          source: 'template',
+          status: 'draft',
+        },
+      });
+
+      return {
+        success: true,
+        data: {
+          storyId: story.id,
+          title: story.title,
+          content: story.content,
+          scenes: parseScenes(story.scenes),
+          status: story.status,
+        },
+      };
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ success: false, message: 'Failed to create story from template' });
+    }
+  });
+
+  fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = request.user?.id;
+    if (!userId) {
+      return reply.status(401).send({ success: false, message: 'Unauthorized' });
+    }
+
+    const stories = await fastify.prisma.story.findMany({
+      where: { userId },
+      include: {
+        illustrations: { orderBy: { sceneIndex: 'asc' } },
+        videos: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      success: true,
+      data: stories.map(storyResponse),
+    };
+  });
+
+  fastify.get<{ Params: StoryParams }>('/:id', async (request, reply) => {
+    const userId = request.user?.id;
+    const { id } = request.params;
+
+    if (!userId) {
+      return reply.status(401).send({ success: false, message: 'Unauthorized' });
+    }
+
+    const story = await fastify.prisma.story.findFirst({
+      where: { id, userId },
+      include: { illustrations: { orderBy: { sceneIndex: 'asc' } } },
+    });
+
+    if (!story) {
+      return reply.status(404).send({ success: false, message: 'Story not found' });
+    }
+
+    return {
+      success: true,
+      data: {
+        ...story,
+        scenes: parseScenes(story.scenes),
+        illustrations: story.illustrations,
+      },
+    };
+  });
+
+  fastify.get<{ Params: StoryParams }>('/:id/progress', async (request, reply) => {
+    const userId = request.user?.id;
+    const { id } = request.params;
+
+    if (!userId) {
+      return reply.status(401).send({ success: false, message: 'Unauthorized' });
+    }
+
+    const story = await fastify.prisma.story.findFirst({
+      where: { id, userId },
+      include: {
+        illustrations: true,
+        videos: true,
+      },
+    });
+
+    if (!story) {
+      return reply.status(404).send({ success: false, message: 'Story not found' });
+    }
+
+    const totalIllustrations = story.illustrations.length;
+    const completedIllustrations = story.illustrations.filter((item) => item.status === 'completed').length;
+    const failedIllustrations = story.illustrations.filter((item) => item.status === 'failed').length;
+    const latestVideo = story.videos[0];
+
+    let currentStep = '鏁呬簨宸茬敓鎴?;
+    let progress = 100;
+    let status = story.status === 'processing' ? 'illustrating' : story.status;
+
+    if (story.status === 'draft') {
+      status = 'generating';
+      currentStep = '姝ｅ湪鐢熸垚鏁呬簨';
+      progress = 5;
+    } else if (story.status === 'processing') {
+      status = 'illustrating';
+      currentStep = '姝ｅ湪鐢熸垚鎻掔敾';
+      progress = totalIllustrations > 0 ? Math.round((completedIllustrations / totalIllustrations) * 100) : 10;
+    } else if (latestVideo?.status === 'processing') {
+      status = 'rendering';
+      currentStep = '姝ｅ湪鐢熸垚瑙嗛';
+      progress = 80;
+    } else if (story.status === 'illustrated' || story.status === 'completed') {
+      status = 'completed';
+      currentStep = '宸插畬鎴?;
+      progress = 100;
+    }
+
+    return {
+      success: true,
+      data: {
+        storyId: story.id,
+        status,
+        currentStep,
+        progress,
+        completedIllustrations,
+        failedIllustrations,
+        totalIllustrations,
+      },
+    };
+  });
+
+  fastify.put<{ Params: StoryParams; Body: { segments: any[] } }>('/:id/segments', async (request, reply) => {
+    const userId = request.user?.id;
+    const { id } = request.params;
+
+    if (!userId) {
+      return reply.status(401).send({ success: false, message: 'Unauthorized' });
+    }
+
+    const story = await fastify.prisma.story.findFirst({
+      where: { id, userId },
+    });
+
+    if (!story) {
+      return reply.status(404).send({ success: false, message: 'Story not found' });
+    }
+
+    const segments = Array.isArray(request.body?.segments) ? request.body.segments : [];
+    const scenes = toSceneArray(segments);
+
+    const updatedStory = await fastify.prisma.story.update({
+      where: { id },
+      data: {
+        scenes: JSON.stringify(scenes),
+        content: scenes.map((scene) => scene.text).join('\n\n'),
+      },
+      include: {
+        illustrations: { orderBy: { sceneIndex: 'asc' } },
+      },
+    });
+
+    return {
+      success: true,
+      data: storyResponse(updatedStory),
+    };
+  });
+
+  fastify.patch<{ Params: SegmentParams; Body: SegmentPatchBody }>('/:id/segments/:segmentId', async (request, reply) => {
+    const userId = request.user?.id;
+    const { id, segmentId } = request.params;
+
+    if (!userId) {
+      return reply.status(401).send({ success: false, message: 'Unauthorized' });
+    }
+
+    const story = await fastify.prisma.story.findFirst({
+      where: { id, userId },
+    });
+
+    if (!story) {
+      return reply.status(404).send({ success: false, message: 'Story not found' });
+    }
+
+    const targetIndex = parseSegmentIndex(segmentId);
+    if (targetIndex === null) {
+      return reply.status(400).send({ success: false, message: 'Invalid segment id' });
+    }
+
+    const scenes = parseScenes(story.scenes).map((scene) => {
+      if (scene.index !== targetIndex) {
+        return scene;
+      }
+
+      return {
+        ...scene,
+        description: request.body?.description || request.body?.sceneDesc || scene.description,
+        text: request.body?.text || request.body?.content || scene.text,
+      };
+    });
+
+    const updatedStory = await fastify.prisma.story.update({
+      where: { id },
+      data: {
+        scenes: JSON.stringify(scenes),
+        content: scenes.map((scene) => scene.text).join('\n\n'),
+      },
+      include: {
+        illustrations: { orderBy: { sceneIndex: 'asc' } },
+      },
+    });
+
+    return {
+      success: true,
+      data: storyResponse(updatedStory),
+    };
+  });
+
+  fastify.put<{ Params: StoryParams; Body: UpdateStoryBody }>('/:id', async (request, reply) => {
+    const userId = request.user?.id;
+    const { id } = request.params;
+
+    if (!userId) {
+      return reply.status(401).send({ success: false, message: 'Unauthorized' });
+    }
+
+    const parseResult = updateStorySchema.safeParse(request.body);
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        success: false,
+        message: 'Invalid request body',
+        errors: parseResult.error.errors,
+      });
+    }
+
+    const story = await fastify.prisma.story.findFirst({
+      where: { id, userId },
+    });
+
+    if (!story) {
+      return reply.status(404).send({ success: false, message: 'Story not found' });
+    }
+
+    const nextScenes = parseResult.data.scenes || parseScenes(story.scenes);
+
+    const updatedStory = await fastify.prisma.story.update({
+      where: { id },
+      data: {
+        content: parseResult.data.content ?? story.content,
+        scenes: JSON.stringify(nextScenes),
+      },
+      include: {
+        illustrations: { orderBy: { sceneIndex: 'asc' } },
+      },
+    });
+
+    return {
+      success: true,
+      data: storyResponse(updatedStory),
+    };
+  });
+
+  fastify.delete<{ Params: StoryParams }>('/:id', async (request, reply) => {
+    const userId = request.user?.id;
+    const { id } = request.params;
+
+    if (!userId) {
+      return reply.status(401).send({ success: false, message: 'Unauthorized' });
+    }
+
+    const story = await fastify.prisma.story.findFirst({
+      where: { id, userId },
+    });
+
+    if (!story) {
+      return reply.status(404).send({ success: false, message: 'Story not found' });
+    }
+
+    await fastify.prisma.story.delete({
+      where: { id },
+    });
+
+    return {
+      success: true,
+      message: 'Story deleted',
+    };
+  });
+}
+
+
+
+
+
+
+
+
+
+
+
+
+

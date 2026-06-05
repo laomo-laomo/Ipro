@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" width="400" height="280" preserveAspectRatio="none">
+  <defs>
+    <!-- Weathered parchment: slightly darker, more stained -->
+    <radialGradient id="parchmentScroll" cx="50%" cy="50%" r="80%">
+      <stop offset="0%" stop-color="#f0e3c4"/>
+      <stop offset="55%" stop-color="#d8c398"/>
+      <stop offset="100%" stop-color="#b8985a"/>
+    </radialGradient>
+    <!-- Soft brown ink for the brushstroke borders -->
+    <linearGradient id="inkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3d2410"/>
+      <stop offset="100%" stop-color="#6e4a25"/>
+    </linearGradient>
+    <!-- Burnt-edge tint -->
+    <linearGradient id="burntEdge" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(60, 30, 0, 0.18)"/>
+      <stop offset="50%" stop-color="rgba(60, 30, 0, 0)"/>
+      <stop offset="100%" stop-color="rgba(60, 30, 0, 0.18)"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Parchment -->
+  <rect x="0" y="0" width="400" height="280" fill="url(#parchmentScroll)"/>
+
+  <!-- Vertical burn marks at the edges (book page feel) -->
+  <rect x="0" y="0" width="400" height="280" fill="url(#burntEdge)"/>
+
+  <!-- Outer brushstroke border (slightly irregular via path with subtle wobble) -->
+  <path
+    d="M 14 14 L 386 13 L 388 22 L 387 266 L 380 268 L 19 267 L 13 264 L 14 16 Z"
+    fill="none"
+    stroke="url(#inkGrad)"
+    stroke-width="2.5"
+    stroke-linejoin="round"
+    opacity="0.95"
+  />
+
+  <!-- Inner thin border -->
+  <path
+    d="M 26 26 L 374 25 L 376 32 L 375 254 L 370 256 L 28 255 L 24 252 L 25 28 Z"
+    fill="none"
+    stroke="#6e4a25"
+    stroke-width="1"
+    stroke-linejoin="round"
+    opacity="0.6"
+  />
+
+  <!-- Corner accents: simple L-shaped ink strokes (no florals) -->
+  <g stroke="#3d2410" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.85">
+    <!-- top-left -->
+    <path d="M 4 30 L 4 4 L 30 4"/>
+    <!-- top-right -->
+    <path d="M 370 4 L 396 4 L 396 30"/>
+    <!-- bottom-left -->
+    <path d="M 4 250 L 4 276 L 30 276"/>
+    <!-- bottom-right -->
+    <path d="M 370 276 L 396 276 L 396 250"/>
+  </g>
+
+  <!-- Small dot ornaments at the four corners (inside the border) -->
+  <g fill="#3d2410" opacity="0.7">
+    <circle cx="34" cy="34" r="1.5"/>
+    <circle cx="366" cy="34" r="1.5"/>
+    <circle cx="34" cy="246" r="1.5"/>
+    <circle cx="366" cy="246" r="1.5"/>
+  </g>
+
+  <!-- Subtle horizontal "page line" (top and bottom) — old book paper feel -->
+  <line x1="40" y1="18" x2="360" y2="18" stroke="#6e4a25" stroke-width="0.5" opacity="0.3"/>
+  <line x1="40" y1="262" x2="360" y2="262" stroke="#6e4a25" stroke-width="0.5" opacity="0.3"/>
+</svg>

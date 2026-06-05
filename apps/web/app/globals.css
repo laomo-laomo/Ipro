@@ -1,0 +1,142 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;800&family=ZCOOL+KuaiLe&display=swap');
+
+@layer base {
+  :root {
+    --background: 35 100% 98%;
+    --foreground: 260 25% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 260 25% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 260 25% 14%;
+    --primary: 262 83% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 35 100% 97%;
+    --secondary-foreground: 260 25% 14%;
+    --muted: 30 20% 95%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 38 92% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 25% 89%;
+    --input: 30 25% 89%;
+    --ring: 262 83% 58%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 258 23% 12%;
+    --foreground: 35 50% 97%;
+    --card: 258 22% 16%;
+    --card-foreground: 35 50% 97%;
+    --popover: 258 22% 16%;
+    --popover-foreground: 35 50% 97%;
+    --primary: 267 84% 68%;
+    --primary-foreground: 258 40% 12%;
+    --secondary: 258 18% 20%;
+    --secondary-foreground: 35 50% 97%;
+    --muted: 258 16% 20%;
+    --muted-foreground: 35 16% 72%;
+    --accent: 38 92% 58%;
+    --accent-foreground: 258 40% 12%;
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 258 16% 26%;
+    --input: 258 16% 26%;
+    --ring: 267 84% 68%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Noto Sans SC', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-image:
+      radial-gradient(circle at top, rgba(124, 58, 237, 0.16), transparent 28%),
+      radial-gradient(circle at 20% 20%, rgba(245, 158, 11, 0.12), transparent 20%),
+      linear-gradient(180deg, rgba(255, 251, 245, 0.96), rgba(255, 247, 237, 0.92));
+    background-attachment: fixed;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.02em;
+  }
+
+  ::selection {
+    background: rgba(124, 58, 237, 0.18);
+  }
+}
+
+@layer components {
+  .storybook-title {
+    font-family: 'ZCOOL KuaiLe', 'Noto Sans SC', sans-serif;
+  }
+
+  .paper-panel {
+    @apply rounded-[28px] border border-white/70 bg-white/85 shadow-[0_20px_60px_-24px_rgba(76,29,149,0.35)] backdrop-blur-xl;
+  }
+
+  .page-shell {
+    @apply mx-auto w-full max-w-6xl px-4 pb-24 pt-8 sm:px-6 lg:px-8;
+  }
+
+  .page-enter {
+    animation: page-enter 0.35s ease-out;
+  }
+}
+
+@layer utilities {
+  .text-gradient-magic {
+    @apply bg-gradient-to-r from-violet-600 via-fuchsia-500 to-amber-400 bg-clip-text text-transparent;
+  }
+
+  .shadow-magic {
+    box-shadow: 0 20px 45px -20px rgba(124, 58, 237, 0.45);
+  }
+
+  .bg-grid-warm {
+    background-image:
+      linear-gradient(rgba(232, 224, 212, 0.45) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(232, 224, 212, 0.45) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+

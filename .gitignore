@@ -1,0 +1,75 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment files
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Build outputs and caches
+dist/
+build/
+.next/
+**/.next/
+.turbo/
+**/.turbo/
+.cache/
+coverage/
+*.tsbuildinfo
+
+# Logs
+*.log
+*.err.log
+*.out.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Temporary and local debug artifacts
+.tmp*
+tmp/
+temp/
+devnull
+args.json
+navigate.json
+decision.json
+cstcloud-mcp.json
+check_*.py
+patch_*.py
+check_*.js
+find-*.js
+find-*.ts
+fix-*.js
+fix_*.cjs
+list-*.js
+ill-route-backup.ts
+apps/api/.tmp-*.cjs
+apps/api/temp_check.cjs
+apps/api/find-corrupted.ts
+apps/api/fix_urls.cjs
+apps/web/args.json
+apps/web/navigate.ps1
+apps/web/test.ps1
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local AI/tooling state
+.harness/
+.mavis/
+.opencode/
+.qwen/

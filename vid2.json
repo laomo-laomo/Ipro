@@ -1,0 +1,1 @@
+{"success":false,"message":"Invalid request body","code":"VALIDATION_ERROR","errors":[{"received":"minimax","code":"invalid_enum_value","options":["tts","cloned"],"path":["audioType"],"message":"Invalid enum value. Expected 'tts' | 'cloned', received 'minimax'"}]}

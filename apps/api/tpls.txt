@@ -1,0 +1,15 @@
+cols: ['id', 'title', 'content', 'scenes', 'cover', 'status', 'createdAt', 'updatedAt']
+  tpl_three_pigs       | 三只小猪                 | active   | scenes bytes=1302
+  cmpxlle1m002vcr1vip4mbqwl | 匹诺曹                  | active   | scenes bytes=13984
+  cmpuv1rck009kuig3gv5heau8 | 卖火柴的小女孩              | active   | scenes bytes=21878
+  cmpwbse9o001se51rg62dwmdw | 司马光砸缸                | active   | scenes bytes=17889
+  tpl_red_hood         | 小红帽                  | active   | scenes bytes=1236
+  cmpwhod2m001iynz8igmqxedd | 愚公移山                 | active   | scenes bytes=21023
+  cmpyx1w2f0004ovjyx587otzy | 曹冲称象                 | active   | scenes bytes=11659
+  cmq0cpt6b000811kgred9vqxk | 武松打虎                 | active   | scenes bytes=14106
+  tpl_cinderella       | 灰姑娘                  | active   | scenes bytes=1266
+  tpl_snow_white       | 白雪公主                 | active   | scenes bytes=1302
+  cmps8spaq054zhn3p89v62bzt | 白马王子                 | active   | scenes bytes=15719
+  cmpz3ht0j0002g86fheqs20dc | 睡美人                  | active   | scenes bytes=18553
+  cmpwejq9w0007plqaecft5la3 | 神笔马良                 | active   | scenes bytes=21248
+  cmpqgr2l3002s12fftkckufdn | 美女与野兽                | active   | scenes bytes=1332

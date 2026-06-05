@@ -1,0 +1,5 @@
+('cmq0o1fai004z13xl2f2ig63r', '神笔马良', 'cmpm7bks30001r7zeej8m2lgm', 'illustrated', 8, 8)
+('cmq0mfpna001f13u9wukgqq9x', '武松打虎', 'cmpm7bks30001r7zeej8m2lgm', 'processing', 7, 6)
+('cmq0cnu1d000711kgxnwn4416', '武松打虎', 'cmpm7bks30001r7zeej8m2lgm', 'illustrated', 7, 7)
+('cmpzfsh8u000r12z3qc8wkgsu', '曹冲称象', 'cmpm7bks30001r7zeej8m2lgm', 'illustrated', 6, 6)
+('cmpz83p68000b4b7z93h1hbcz', '匹诺曹', 'cmpm7bks30001r7zeej8m2lgm', 'illustrated', 6, 6)
