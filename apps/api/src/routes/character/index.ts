@@ -286,11 +286,15 @@ export async function characterRoutes(fastify: FastifyInstance) {
             .catch((e) => fastify.log.warn(`[Stylize] Upload to素材库 skipped: ${e.message}`));
         }
 
-        // Update character with stylized photo
+        // Update character with stylized photo. Also track the title this
+        // costume was generated for so future story creation can decide
+        // whether to re-stylize for a new story context.
         const updatedCharacter = await fastify.prisma.character.update({
           where: { id },
           data: {
             stylizedPhotoUrl,
+            lastStylizedTitle: title ?? null,
+            lastStylizedAt: new Date(),
             status: 'completed',
           },
         });

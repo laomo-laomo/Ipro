@@ -49,6 +49,10 @@ model Character {
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   originalPhotoUrl   String
   stylizedPhotoUrl   String?
+  // Tracks the story title / context the current `stylizedPhotoUrl` was generated
+  // for. Used to decide whether a story creation must trigger a re-stylize.
+  lastStylizedTitle  String?
+  lastStylizedAt     DateTime?
   featureDesc        String?
   status             String   @default("pending") // pending, processing, completed
   createdAt          DateTime @default(now())
@@ -65,6 +69,13 @@ model Story {
   title       String
   content     String
   scenes      String   // JSON: [{index, description, text}]
+  // Per-story costume reference. When a story is created with a title that
+  // differs from the character's `lastStylizedTitle`, the system re-stylizes
+  // the character and stores the result here. The illustration service
+  // prefers this URL over the global `Character.stylizedPhotoUrl` so the
+  // character's clothing matches the story (e.g. 卖火柴的小女孩 no longer
+  // wears the Snow White ball gown).
+  characterStylizedUrl String?
   source      String   @default("template") // template, custom
   status      String   @default("draft") // draft, processing, illustrated, completed
   totalCost   Float    @default(0)

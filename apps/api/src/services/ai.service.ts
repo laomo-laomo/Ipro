@@ -460,6 +460,75 @@ export async function uploadToApizAsset(imageUrl: string, name: string, groupNam
   return uploadData?.media_url || uploadData?.image_url || null;
 }
 
+export interface EnsureCostumeResult {
+  url: string;
+  restyled: boolean;
+  reason: 'cache-hit' | 'restyled' | 'fallback-after-error';
+}
+
+/**
+ * Ensure the character has a stylized photo whose costume matches the given
+ * story title. Reuses the existing stylized photo when the title matches
+ * `Character.lastStylizedTitle`; otherwise re-runs `stylizeCharacter` and
+ * updates both the Character row and the Story row with the new URL.
+ *
+ * Title is used as the cache key (case-insensitive, trimmed). When title is
+ * missing/empty, behaves like a no-op cache hit on the existing photo.
+ */
+export async function ensureCharacterCostumeForStory(
+  prisma: any,
+  character: { id: string; originalPhotoUrl: string; stylizedPhotoUrl: string | null; lastStylizedTitle: string | null },
+  storyId: string,
+  title: string | null | undefined,
+  style: 'pixar' | 'ghibli' | 'clay' | 'handdrawn' = 'pixar'
+): Promise<EnsureCostumeResult> {
+  const normalizedTitle = (title ?? '').trim();
+  const cachedTitle = (character.lastStylizedTitle ?? '').trim();
+
+  if (!character.stylizedPhotoUrl) {
+    throw new Error('Character has no stylized photo. Complete the style step first.');
+  }
+  if (normalizedTitle && normalizedTitle === cachedTitle) {
+    // Cache hit: story's per-story URL may or may not be set; write it for symmetry.
+    if (storyId) {
+      await prisma.story.update({
+        where: { id: storyId },
+        data: { characterStylizedUrl: character.stylizedPhotoUrl },
+      }).catch(() => { /* story row may not exist yet in some flows */ });
+    }
+    return { url: character.stylizedPhotoUrl, restyled: false, reason: 'cache-hit' };
+  }
+
+  // Cache miss: re-stylize for the new story context.
+  try {
+    const newUrl = await stylizeCharacter(character.originalPhotoUrl, style, normalizedTitle || undefined);
+    if (!newUrl) {
+      // Stylize returned nothing useful; keep the existing photo but don't
+      // touch lastStylizedTitle so the next attempt will retry.
+      return { url: character.stylizedPhotoUrl, restyled: false, reason: 'fallback-after-error' };
+    }
+    await prisma.character.update({
+      where: { id: character.id },
+      data: {
+        stylizedPhotoUrl: newUrl,
+        lastStylizedTitle: normalizedTitle || null,
+        lastStylizedAt: new Date(),
+      },
+    });
+    if (storyId) {
+      await prisma.story.update({
+        where: { id: storyId },
+        data: { characterStylizedUrl: newUrl },
+      });
+    }
+    return { url: newUrl, restyled: true, reason: 'restyled' };
+  } catch (err) {
+    // Don't break story creation on restyle failure; reuse the existing photo.
+    console.warn(`[ensureCostume] restyle failed for character ${character.id}:`, err);
+    return { url: character.stylizedPhotoUrl, restyled: false, reason: 'fallback-after-error' };
+  }
+}
+
 export async function stylizeCharacter(
   photoUrl: string,
   style: 'pixar' | 'ghibli' | 'clay' | 'handdrawn' = 'pixar',

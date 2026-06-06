@@ -1,6 +1,6 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { generateStory as generateStoryWithAI } from '../../services/ai.service.js';
+import { generateStory as generateStoryWithAI, ensureCharacterCostumeForStory } from '../../services/ai.service.js';
 import {
   buildStoryboardFromLegacyScenes,
   normalizeStoryboard,
@@ -471,16 +471,39 @@ export async function storyRoutes(fastify: FastifyInstance) {
       const cachedTemplate = await fastify.prisma.storyTemplate.findFirst({ where: { title, status: 'active' } });
       if (cachedTemplate) {
         const storyboard = parseStoryboard(cachedTemplate.scenes, cachedTemplate.title);
+        // Per-story costume (cache hit fast-path, restyle on cache miss).
+        const costume = await ensureCharacterCostumeForStory(
+          fastify.prisma,
+          character,
+          /* storyId */ '',
+          cachedTemplate.title,
+        );
         const story = await fastify.prisma.story.create({
-          data: { userId, characterId, title: cachedTemplate.title, content: cachedTemplate.content || storyContentFromStoryboard(storyboard), scenes: storyboardToStorage(storyboard), source: 'custom', status: 'completed' },
+          data: {
+            userId,
+            characterId,
+            title: cachedTemplate.title,
+            content: cachedTemplate.content || storyContentFromStoryboard(storyboard),
+            scenes: storyboardToStorage(storyboard),
+            source: 'custom',
+            status: 'completed',
+            characterStylizedUrl: costume.url,
+          },
         });
-        return { success: true, data: { storyId: story.id, title: story.title, content: story.content, storyboard, scenes: storyboardToLegacyScenes(storyboard), status: 'completed' } };
+        return { success: true, data: { storyId: story.id, title: story.title, content: story.content, storyboard, scenes: storyboardToLegacyScenes(storyboard), status: 'completed', characterStylizedUrl: costume.url, costumeRestyled: costume.restyled } };
       }
       const story = await fastify.prisma.story.create({
         data: { userId, characterId, title, content: '', scenes: storyboardToStorage({ version: 1, title, scenes: [] }), source: 'custom', status: 'draft' },
       });
+      // Per-story costume (cache hit fast-path, restyle on cache miss).
+      const costume = await ensureCharacterCostumeForStory(
+        fastify.prisma,
+        character,
+        story.id,
+        title,
+      );
       generateStoryInBackground(fastify, story.id, title, characterId);
-      return { success: true, data: { storyId: story.id, title: story.title, content: '', storyboard: { version: 1, title: story.title, scenes: [] }, scenes: [], status: 'draft' } };
+      return { success: true, data: { storyId: story.id, title: story.title, content: '', storyboard: { version: 1, title: story.title, scenes: [] }, scenes: [], status: 'draft', characterStylizedUrl: costume.url, costumeRestyled: costume.restyled } };
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({ success: false, message: 'Failed to generate story' });
@@ -510,10 +533,28 @@ export async function storyRoutes(fastify: FastifyInstance) {
       const cachedStoryboard = cachedTemplate ? parseStoryboard(cachedTemplate.scenes, cachedTemplate.title) : null;
       const cachedScenes = cachedStoryboard?.scenes ?? [];
       if (cachedTemplate && cachedScenes.length >= MIN_TEMPLATE_SCENES) {
+        // Per-story costume: if the character's current costume was generated
+        // for a different title, re-stylize so the character's clothing matches
+        // this story. Cache hit (same title) is a no-op.
+        const costume = await ensureCharacterCostumeForStory(
+          fastify.prisma,
+          character,
+          /* storyId */ '',  // story not created yet; we'll set characterStylizedUrl after
+          title,
+        );
         const story = await fastify.prisma.story.create({
-          data: { userId, characterId, title: cachedTemplate.title, content: cachedTemplate.content || storyContentFromStoryboard(cachedStoryboard!), scenes: storyboardToStorage(cachedStoryboard!), source: 'template', status: 'completed' },
+          data: {
+            userId,
+            characterId,
+            title: cachedTemplate.title,
+            content: cachedTemplate.content || storyContentFromStoryboard(cachedStoryboard!),
+            scenes: storyboardToStorage(cachedStoryboard!),
+            source: 'template',
+            status: 'completed',
+            characterStylizedUrl: costume.url,
+          },
         });
-        return { success: true, data: { storyId: story.id, title: story.title, content: story.content, storyboard: cachedStoryboard, scenes: storyboardToLegacyScenes(cachedStoryboard!), status: 'completed' } };
+        return { success: true, data: { storyId: story.id, title: story.title, content: story.content, storyboard: cachedStoryboard, scenes: storyboardToLegacyScenes(cachedStoryboard!), status: 'completed', characterStylizedUrl: costume.url, costumeRestyled: costume.restyled } };
       }
       if (cachedTemplate && cachedScenes.length < MIN_TEMPLATE_SCENES) {
         fastify.log.warn(
@@ -524,8 +565,15 @@ export async function storyRoutes(fastify: FastifyInstance) {
       const story = await fastify.prisma.story.create({
         data: { userId, characterId, title, content: '', scenes: storyboardToStorage({ version: 1, title, scenes: [] }), source: 'template', status: 'draft' },
       });
+      // Per-story costume (cache hit fast-path, restyle on cache miss).
+      const costume = await ensureCharacterCostumeForStory(
+        fastify.prisma,
+        character,
+        story.id,
+        title,
+      );
       generateStoryInBackground(fastify, story.id, title, characterId);
-      return { success: true, data: { storyId: story.id, title: story.title, content: '', storyboard: { version: 1, title: story.title, scenes: [] }, scenes: [], status: 'draft' } };
+      return { success: true, data: { storyId: story.id, title: story.title, content: '', storyboard: { version: 1, title: story.title, scenes: [] }, scenes: [], status: 'draft', characterStylizedUrl: costume.url, costumeRestyled: costume.restyled } };
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({ success: false, message: 'Failed to create story from template' });

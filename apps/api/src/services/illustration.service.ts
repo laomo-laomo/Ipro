@@ -406,7 +406,11 @@ export async function generateSceneIllustration(
     });
 
     if (character?.stylizedPhotoUrl) {
-      sourceImageUrl = character.stylizedPhotoUrl;
+      // Prefer the per-story costume URL (set when the story was created with a
+      // different title than the character's last-stylized title) so the
+      // character's clothing matches the story. Fall back to the global
+      // stylized photo when no per-story override exists.
+      sourceImageUrl = story.characterStylizedUrl || character.stylizedPhotoUrl;
     } else {
       throw new Error('Character has no stylized photo. Please complete the style step first.');
     }
