@@ -18,7 +18,7 @@ import type { StorySegment } from '@/types/story';
 function GenerateContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const storyId = searchParams.get('storyId');
+  const storyId = searchParams?.get('storyId') ?? null;
 
   const {
     story,
@@ -101,6 +101,20 @@ function GenerateContent() {
       }
     } catch (err) {
       console.error('启动插画失败:', err);
+      const message = err instanceof Error ? err.message : '未知错误';
+      // "Story already has illustrations" means we hit the wrong endpoint — the
+      // existing 6 illustrations are the answer. Force a fresh load so the
+      // gallery re-renders with `imageStatus: 'completed'`. Without this, the
+      // page stays stuck on whatever stale `segments` were in state, often
+      // showing all 6 cards as "生成失败 / 重试" even though the rows are fine.
+      if (message.includes('Story already has illustrations')) {
+        if (storyId) {
+          await loadStory(storyId);
+          await refreshIllustrations();
+        }
+      } else {
+        showError(`生成失败: ${message}`);
+      }
       // API 失败时也要解锁，否则永远卡住
       setIsIllustrating(false);
       setIsRegenerating(false);
@@ -108,7 +122,7 @@ function GenerateContent() {
     }
     // 注意：成功时不在这里释放 isIllustrating 和 lockRef
     // 它们将在轮询检测到 completed/failed 时由下方 useEffect 重置
-  }, [character, story, showError, refreshIllustrations, startIllustration, startProgressPolling, storyId]);
+  }, [character, isIllustrating, showError, refreshIllustrations, startIllustration, startProgressPolling, storyId]);
 
   // 监听轮询进度，当完成或失败时重置生成状态
   useEffect(() => {
@@ -208,19 +222,20 @@ function GenerateContent() {
   const displayError = error?.includes('Story already has illustrations')
     ? '当前故事已经有插画了。如需重做，请点击“重新生成插画”。'
     : error;
+  const storyFailureReason = progress?.errorMessage || progress?.message || story.errorMessage || displayError;
 
   return (
     <>
       <CelebrationOverlay open={showCelebration} onClose={() => setShowCelebration(false)} />
-      <div className="page-shell page-enter space-y-6">
+      <div className="page-shell page-enter space-y-5 md:space-y-6">
         <FadeIn>
-          <section className="space-y-4">
+          <section className="space-y-3 md:space-y-4">
             <CreationStepper current="generate" characterId={story.characterId || undefined} storyId={storyId} />
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between md:gap-4">
               <div>
                 <p className="text-sm font-medium text-emerald-600">第四步</p>
-                <h1 className="mt-2 text-4xl font-bold">AI 正在把故事写成一本真的绘本</h1>
-                <p className="mt-3 max-w-2xl text-base leading-8 text-muted-foreground">先写剧情，再生成绘本插画，最后你可以预览每一页并继续生成更多内容。</p>
+                <h1 className="mt-2 text-3xl font-bold leading-tight md:text-4xl">AI 正在把故事写成一本真的绘本</h1>
+                <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground md:mt-3 md:text-base md:leading-8">先写剧情，再生成绘本插画，最后你可以预览每一页并继续生成更多内容。</p>
               </div>
               <Button variant="outline" size="sm" onClick={() => router.push(`/create/story?characterId=${story.characterId}`)} className="rounded-full">
                 <ArrowLeft className="h-4 w-4" />
@@ -234,11 +249,16 @@ function GenerateContent() {
 
         {storyState.isFailed && (
           <FadeIn delay={0.08}>
-            <GlassCard className="p-8 text-center">
+            <GlassCard className="p-5 text-center md:p-8">
               <FileText className="mx-auto h-12 w-12 text-destructive" />
               <p className="mt-4 text-lg font-semibold">这次 AI 创作失败了</p>
               <p className="mt-2 text-sm leading-7 text-muted-foreground">故事内容没有成功生成出来。你可以返回上一步重新选择故事，或者直接回到故事选择页再试一次。</p>
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              {storyFailureReason && (
+                <p className="mx-auto mt-3 max-w-2xl rounded-md bg-destructive/10 px-4 py-3 text-left text-sm leading-6 text-destructive">
+                  失败原因：{storyFailureReason}
+                </p>
+              )}
+              <div className="mt-6 grid gap-3 sm:flex sm:flex-wrap sm:items-center sm:justify-center">
                 <Button variant="outline" onClick={() => loadStory(storyId)} className="rounded-full">
                   <RefreshCw className="h-4 w-4" />
                   刷新状态
@@ -257,18 +277,18 @@ function GenerateContent() {
         )}
 
         {storyState.isStoryCompleted && storyState.hasSegments && (
-          <StaggerList className="space-y-6">
+          <StaggerList className="space-y-5 md:space-y-6">
             {!showPreview ? (
               <>
                 <StaggerItem>
-                  <GlassCard className="p-6 sm:p-8">
+                  <GlassCard className="p-5 sm:p-8">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-sm font-medium text-emerald-600">故事已完成</p>
-                        <h2 className="mt-1 text-2xl font-bold">{story.title}</h2>
+                        <h2 className="mt-1 text-xl font-bold leading-tight md:text-2xl">{story.title}</h2>
                         <p className="mt-2 text-sm leading-7 text-muted-foreground">现在可以先阅读剧情，也可以直接继续生成绘本插画，把每一幕都变成完整书页。</p>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="grid gap-2 sm:flex sm:flex-wrap">
                         <Button variant="outline" size="sm" onClick={() => setShowPreview(true)} className="rounded-full">
                           <FileText className="h-4 w-4" />
                           阅读故事
@@ -309,7 +329,7 @@ function GenerateContent() {
                   </GlassCard>
                 </StaggerItem>
 
-                <StaggerList className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <StaggerList className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:gap-4 xl:grid-cols-4">
                   {story.segments.map((segment) => {
                     const isGenerating = isIllustrating && !segment.imageUrl;
                     // A scene whose DB status is still 'generating' but the page isn't
@@ -321,7 +341,7 @@ function GenerateContent() {
                     const isFailed = segment.imageStatus === 'failed' || isStuck;
                     return (
                       <StaggerItem key={segment.id}>
-                        <GlassCard className={cn('p-5 text-center transition-transform duration-200 hover:-translate-y-1', isFailed && 'border border-rose-300 bg-rose-50/30')}>
+                        <GlassCard className={cn('p-4 text-center transition-transform duration-200 hover:-translate-y-1 md:p-5', isFailed && 'border border-rose-300 bg-rose-50/30')}>
                           <p className="text-xs font-semibold tracking-[0.18em] text-violet-700 uppercase">第 {segment.order} 页</p>
                           <p className="mt-2 text-sm font-bold line-clamp-2">{segment.title}</p>
                           <div className="mt-4 text-xs">
@@ -346,8 +366,9 @@ function GenerateContent() {
                                       return next;
                                     });
                                     try {
+                                      const storyboardSceneIndex = (story.storyboard.scenes[segment.order - 1]?.index ?? sceneIndex);
                                       const { retrySingleIllustration } = await import('@/lib/api/story');
-                                      await retrySingleIllustration(storyId, sceneIndex);
+                                      await retrySingleIllustration(storyId, storyboardSceneIndex);
                                       await refreshIllustrations();
                                     } catch (e) {
                                       console.error('重试失败:', e);
@@ -405,7 +426,7 @@ function GenerateContent() {
 
         {storyState.isStoryCompleted && !storyState.hasSegments && (
           <FadeIn>
-            <GlassCard className="p-8 text-center">
+            <GlassCard className="p-5 text-center md:p-8">
               <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
               <p className="mt-4 text-muted-foreground">故事内容正在加载中，请稍候...</p>
               <Button variant="outline" onClick={() => loadStory(storyId)} className="mt-4 rounded-full">
@@ -420,7 +441,7 @@ function GenerateContent() {
 
         {storyState.isStoryCompleted && (
           <FadeIn delay={0.12}>
-            <GlassCard className="p-6">
+            <GlassCard className="p-5 md:p-6">
               <div className="flex items-start gap-3">
                 <Sparkles className="mt-1 h-5 w-5 text-amber-500" />
                 <p className="text-sm leading-7 text-muted-foreground">完成故事后建议先快速阅读一遍，如果剧情节奏和标题都满意，再生成插画和后续视频，成品会更连贯。{storyState.allIllustrationsCompleted ? ' 当前插画已全部完成，可以直接前往“我的作品”查看成品。' : ''}</p>

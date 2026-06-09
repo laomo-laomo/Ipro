@@ -31,40 +31,52 @@ export function CharacterStylizer({
   className,
 }: CharacterStylizerProps) {
   const [showComparison, setShowComparison] = useState(false);
-  // sessionLocked tracks whether the current character has ever successfully completed stylization in this session
-  const [sessionLocked, setSessionLocked] = useState(false);
+  // Whether the user has kicked off at least one stylize for the current character
+  // in this session. The local state used to gate the "已生成的角色" image — but
+  // it broke back-nav: navigating /create/stylize → /create/generate → /create/stylize
+  // would remount the component with a clean ref, so `wasStylizing.current` was
+  // always `false` on remount and the stylized image vanished even though
+  // `character.stylizedPhotoUrl` was populated.
+  //
+  // Fix: derive the display purely from the persisted URL, and track a session
+  // flag ONLY for the button label ("重新生成" vs "应用风格"). The dev-seed
+  // `Character.stylizedPhotoUrl` was historically set to a `/styles/pixar.svg`
+  // placeholder, but the API now omits that field entirely for new characters
+  // (see `stylizeCharacter` in ai.service.ts), so a truthy URL is always a real
+  // result.
+  const [hasStylizedInSession, setHasStylizedInSession] = useState(false);
   const wasStylizing = useRef(false);
 
   useEffect(() => {
     if (character.id) {
-      // Character changed — reset session lock so we always start fresh
-      setSessionLocked(false);
+      // Character changed — reset session flag so the button shows "应用风格" again.
+      setHasStylizedInSession(false);
     }
   }, [character.id]);
 
   // Detect when stylization finished successfully
   useEffect(() => {
     if (wasStylizing.current && !isStylizing && !stylizeError && character.id) {
-      setSessionLocked(true);
+      setHasStylizedInSession(true);
     }
     wasStylizing.current = isStylizing;
   }, [isStylizing, stylizeError, character.id]);
 
-  const showStylized = sessionLocked && character.stylizedPhotoUrl;
+  const showStylized = Boolean(character.stylizedPhotoUrl);
 
 return (
-    <div className={cn('space-y-6', className)}>
-      <div className="rounded-[30px] border border-white/70 bg-white/80 p-5 shadow-paper backdrop-blur-xl">
-        <div className="mb-5 flex items-center justify-between gap-4">
+    <div className={cn('space-y-5 md:space-y-6', className)}>
+      <div className="rounded-[24px] border border-white/70 bg-white/82 p-4 shadow-paper backdrop-blur-xl md:rounded-[30px] md:p-5">
+        <div className="mb-4 flex items-center justify-between gap-3 md:mb-5 md:gap-4">
           <div>
             <p className="text-sm font-medium text-rose-600">魔法变身</p>
-            <h3 className="mt-1 text-2xl font-bold">从真实照片，到绘本角色</h3>
+            <h3 className="mt-1 text-xl font-bold md:text-2xl">从真实照片，到绘本角色</h3>
           </div>
           {character.stylizedPhotoUrl && (
             <button
               type="button"
               onClick={() => setShowComparison(!showComparison)}
-              className="rounded-full border border-border bg-white px-4 py-2 text-xs font-medium text-muted-foreground transition hover:text-foreground"
+              className="shrink-0 rounded-full border border-border bg-white px-3 py-2 text-xs font-medium text-muted-foreground transition hover:text-foreground md:px-4"
             >
               {showComparison ? '分开显示' : '对比查看'}
             </button>
@@ -73,8 +85,8 @@ return (
 
         <div className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-center">
           <div className="space-y-3">
-            <div className="relative aspect-square overflow-hidden rounded-[26px] border border-white/70 bg-gradient-to-br from-violet-100 to-white p-2 shadow-sm">
-              <div className="flex h-full items-center justify-center overflow-hidden rounded-[20px] bg-white">
+            <div className="relative aspect-square overflow-hidden rounded-[22px] border border-white/70 bg-gradient-to-br from-violet-100 to-white p-2 shadow-sm md:rounded-[26px]">
+              <div className="flex h-full items-center justify-center overflow-hidden rounded-[16px] bg-white md:rounded-[20px]">
                 {character.originalPhotoUrl ? (
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={character.originalPhotoUrl} alt="原图" className="h-full w-full object-cover" />
@@ -87,14 +99,14 @@ return (
           </div>
 
           <div className="flex items-center justify-center">
-            <div className={cn('flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-amber-400 text-white shadow-magic', isStylizing && 'animate-pulse')}>
-              <Sparkles className="h-6 w-6" />
+            <div className={cn('flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-amber-400 text-white shadow-magic md:h-14 md:w-14', isStylizing && 'animate-pulse')}>
+              <Sparkles className="h-5 w-5 md:h-6 md:w-6" />
             </div>
           </div>
 
           <div className="space-y-3">
-            <div className="relative aspect-square overflow-hidden rounded-[26px] border border-white/70 bg-gradient-to-br from-rose-100 to-amber-50 p-2 shadow-sm">
-              <div className="relative flex h-full items-center justify-center overflow-hidden rounded-[20px] bg-white">
+            <div className="relative aspect-square overflow-hidden rounded-[22px] border border-white/70 bg-gradient-to-br from-rose-100 to-amber-50 p-2 shadow-sm md:rounded-[26px]">
+              <div className="relative flex h-full items-center justify-center overflow-hidden rounded-[16px] bg-white md:rounded-[20px]">
                 {isStylizing ? (
                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#1E1B2E]/72 text-white">
                     <Loader2 className="h-8 w-8 animate-spin text-amber-300" />
@@ -118,10 +130,10 @@ return (
         </div>
       </div>
 
-      <div className="rounded-[30px] border border-white/70 bg-white/80 p-5 shadow-paper backdrop-blur-xl">
+      <div className="rounded-[24px] border border-white/70 bg-white/82 p-4 shadow-paper backdrop-blur-xl md:rounded-[30px] md:p-5">
         <div className="mb-4">
           <p className="text-sm font-medium text-rose-600">选择风格</p>
-          <h3 className="mt-1 text-xl font-bold">挑一个最像你心中童话世界的画风</h3>
+          <h3 className="mt-1 text-lg font-bold md:text-xl">挑一个最像你心中童话世界的画风</h3>
         </div>
         <StyleSelector selectedStyle={selectedStyle} onStyleChange={onStyleChange} disabled={disabled || isStylizing} />
 
@@ -132,7 +144,7 @@ return (
                 <Loader2 className="h-4 w-4 animate-spin" />
                 应用中...
               </>
-            ) : sessionLocked ? (
+            ) : hasStylizedInSession ? (
               <>
                 <RotateCcw className="h-4 w-4" />
                 重新生成

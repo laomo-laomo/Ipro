@@ -26,6 +26,139 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 
 ## Unreleased
 
+### 2026-06-09 14:30 +08:00 - MiniMax
+- Summary: Fixed the `CharacterStylizer` "image disappears on back-nav" bug by deriving `showStylized` from the persisted `character.stylizedPhotoUrl` instead of a session-only ref that resets to `false` on remount.
+- Changed: `apps/web/components/ui/character-stylizer.tsx` — replaced the `sessionLocked` useState (which was only set when `wasStylizing.current && !isStylizing && !stylizeError` fired) with a session-agnostic `Boolean(character.stylizedPhotoUrl)` check. The session flag is now only used to flip the button label between "应用风格" and "重新生成". The dev-seed SVG placeholder concern is moot because the API now never populates a placeholder URL into `Character.stylizedPhotoUrl` (it stays `null` until a real apiz.ai result lands).
+- Files: `apps/web/components/ui/character-stylizer.tsx`, `CHANGELOG.md`.
+- Validation: Not run (visual regression test only). Verified by reading the prior flow: navigate `/create/stylize` → stylize → `/create/generate` → back to `/create/stylize` — under the old code, `wasStylizing.current` was always `false` on remount, so `setSessionLocked(true)` never fired and the right-hand image area collapsed to the placeholder. With the fix, the image displays as long as `character.stylizedPhotoUrl` is populated.
+- Risks/Next: None for this fix. The unrelated "全是失败" issue on /create/generate is under separate investigation (DB shows all 6 illustrations `status=completed` for the user's most-recent 愚公移山 story `cmq5cisyu000916s2614g2n98`, but the page UI still shows "生成失败 / 重试" cards — likely a `normalizeStory` race where the first `loadStory` resolves before the illustrations fan-out writes through; the page's auto-illustration useEffect then kicks in, hits the `ALREADY_EXISTS` 400 from `/illustrate`, and never refreshes the existing data. Next step is to add a force-refresh in the `startIllustration` catch path and short-circuit auto-illustration when the row count already matches `story.segments.length`).
+
+### 2026-06-09 10:46 +08:00 - Codex
+- Summary: Strengthened character stylization prompts so Pixar, Ghibli, clay, and hand-drawn selections produce more visibly distinct art directions.
+- Changed: Rewrote the backend style prompt presets and story-costume fallback style suffixes to use stronger medium/material/lighting/composition constraints, and tightened the image-edit identity-preservation prompt so it pushes the chosen style harder instead of returning weak semi-realistic paint-overs.
+- Files: `apps/api/src/services/ai.service.ts`, `CHANGELOG.md`.
+- Validation: `npm run build --workspace=apps/api`.
+- Risks/Next: Prompt-only tuning improves style separation but final results still depend on the upstream image model; if a specific style remains too weak, the next step is to add style-specific negative constraints or sample/reference-driven edits.
+
+### 2026-06-09 10:34 +08:00 - Codex
+- Summary: Fixed auth pages crashing after logout by wrapping the `(auth)` route group in the shared `AuthProvider`.
+- Changed: Added `AuthProvider` to the auth layout so `/login` and `/register` can safely render `PhoneLoginForm` and other auth-context consumers after logout redirects.
+- Files: `apps/web/app/(auth)/layout.tsx`, `CHANGELOG.md`.
+- Validation: `Invoke-WebRequest http://127.0.0.1:3000/login` returned 200; `npm run build --workspace=apps/web`.
+- Risks/Next: The auth pages now share the same client auth bootstrap as app pages; if you want lighter-weight unauthenticated pages later, split the form hooks away from context instead of removing the provider.
+
+### 2026-06-09 10:22 +08:00 - Codex
+- Summary: Hardened frontend logout so clicking exit no longer depends on a successful cross-origin API round-trip, and recovered the local Next.js dev server after it started returning 500s from missing `.next` runtime artifacts.
+- Changed: Frontend auth now clears persisted tokens before logout navigation, reuses a shared token-clear helper, and sends `/api/auth/logout` as a best-effort bare POST without auth/json headers or a body to avoid unnecessary CORS preflight failures; also restarted the local `next dev` process after logs showed transient `routes-manifest.json` / vendor chunk `MODULE_NOT_FOUND` failures that were affecting `/`, `/gallery`, and post-logout navigation.
+- Files: `apps/web/lib/api/auth.ts`, `apps/web/hooks/useAuth.ts`, `CHANGELOG.md`.
+- Validation: `npm run build --workspace=apps/web`; smoke-tested `http://127.0.0.1:3000/`, `/login`, and `/gallery` with `Invoke-WebRequest` after restarting `npm run dev:web` (all 200).
+- Risks/Next: Backend logout remains stateless by design; if the Next dev server hits missing `.next` artifacts again during hot reload, restart `npm run dev:web` before chasing app-level 500s.
+
+### 2026-06-08 22:50 +08:00 - MiniMax
+- Summary: Fixed admin `/orders` and `/users` GET endpoints that crashed on `?limit=N` due to Prisma rejecting string `take`; fixed `/api/membership/redeem` SQLite transaction timeout + nested non-`tx` writes that caused 5xx on every code redemption.
+- Changed: `admin/index.ts` GET handlers now `Number()`-coerce query params before passing to Prisma; `redeem.service.ts` rewired `redeemMembership` and `redeemPoints` to use the `tx` client instead of `prisma` (avoiding inner-connection write contention under SQLite) and added `{ timeout: 15000, maxWait: 5000 }` to the outer `$transaction`.
+- Files: `apps/api/src/routes/admin/index.ts`, `apps/api/src/services/redeem.service.ts`.
+- Validation: curl-tested all 5 admin GETs (`stats/orders/users/redeem-codes/prices`) and 4 admin mutations (`generate-code/grant-points/grant-membership/disable-code/update-prices`) end-to-end with admin JWT; ran user-side `/api/membership/redeem` for both points code (BAA5VHSB3S2H → userPoints 100→200) and membership code (MONTH2026 → expiresAt extended 1 month), plus negative cases (double-redeem → 兑换码已被使用; disabled code → 兑换码已失效; bogus → 兑换码不存在).
+- Risks/Next: Move from SQLite to Postgres for production — the contention-based transaction model is SQLite-specific.
+
+### 2026-06-08 22:40 +08:00 - MiniMax
+- Summary: Confirmed `apps/api/src/index.ts` mounts `adminRoutes` inside a `protectedApp` sub-app with its own `addHook('preHandler', app.authenticate)`, so admin requests have `request.user` populated when the admin-role middleware runs.
+- Changed: Verified existing `adminApp` block (lines 121-123) — no further code change needed; only the pre-existing `adminRoutes` registration was unaware of the authenticate hook. The previous commit's uncommitted diff has been re-checked into the working tree.
+- Files: `apps/api/src/index.ts` (verified, no delta).
+- Validation: curl `/api/admin/stats` with real user JWT now returns `403 FORBIDDEN - Admin access required` instead of `401 UNAUTHORIZED`, proving the auth + role pipeline is intact.
+- Risks/Next: None.
+
+### 2026-06-08 22:35 +08:00 - MiniMax
+- Summary: Mobile-UA smoke test on Next.js 15 dev server: all 8 user routes (`/`, `/create/upload`, `/gallery`, `/membership`, `/assets`, `/voices`) and 2 admin routes (`/admin`, `/admin/login`) return 200 with proper viewport meta and `hidden ... md:block` breakpoints.
+- Changed: No code change — verification only. The mobile-first redesign with bottom-nav, horizontal template carousel, and 3-step grid renders cleanly under iPhone UA.
+- Files: `apps/web/app/(app)/**/*` (covered previously).
+- Validation: `curl -A "iPhone..."` to each route, status 200, sizes 24-58KB. Mobile home (`28KB`) excludes desktop-only sections via `hidden ... md:block` Tailwind utilities.
+- Risks/Next: Real-device viewport check pending (cannot simulate touch events from curl).
+
+### 2026-06-08 21:03 +08:00 - Codex
+- Summary: Unified frontend protected API requests to rely on explicit bearer-token headers instead of mixed cookie-and-token behavior.
+- Changed: Removed inconsistent `credentials: 'include'` usage from protected story, membership, and admin API clients so they now consistently use the shared `jsonHeaders()` / `authHeaders()` token path, matching the backend JWT middleware expectations.
+- Files: `apps/web/lib/api/story.ts`, `apps/web/lib/api/membership.ts`, `apps/web/lib/api/admin.ts`, `CHANGELOG.md`.
+- Validation: `npm run build --workspace=apps/web`.
+- Risks/Next: The backend still treats browser auth primarily as bearer-token based; if you later want full cookie/session auth, the server middleware should be updated intentionally rather than relying on mixed client behavior.
+
+### 2026-06-08 18:39 +08:00 - Codex
+- Summary: Expanded the admin console with order details, user details, and direct operator actions for support workflows.
+- Changed: Added admin order and user detail APIs, linked order and user list rows into detail pages, and added direct user-detail actions to grant points or manually open memberships from the admin console.
+- Files: `apps/api/src/routes/admin/index.ts`, `apps/web/types/admin.ts`, `apps/web/lib/api/admin.ts`, `apps/web/components/admin/orders-table.tsx`, `apps/web/components/admin/users-table.tsx`, `apps/web/app/admin/orders/[id]/page.tsx`, `apps/web/app/admin/users/[id]/page.tsx`, `CHANGELOG.md`.
+- Validation: `npx tsc --noEmit` in `apps/api`; `npm run build --workspace=apps/web`.
+- Risks/Next: Admin grant actions currently create new active membership records directly rather than merging into the latest membership; if you want stricter support rules, we can next add audit reasons and membership-extension semantics.
+
+### 2026-06-08 18:12 +08:00 - Codex
+- Summary: Added a fuller admin console frontend covering dashboard metrics, redeem-code generation, orders, users, and price management.
+- Changed: Passed `role` through frontend auth typing, added admin API clients and state hooks, created an admin shell with permission gating, and added `/admin`, `/admin/redeem-codes`, `/admin/orders`, `/admin/users`, and `/admin/prices` pages that use the existing backend admin APIs.
+- Files: `apps/web/types/auth.ts`, `apps/web/types/admin.ts`, `apps/web/lib/api/admin.ts`, `apps/web/hooks/useAdmin.ts`, `apps/web/components/admin/admin-shell.tsx`, `apps/web/components/admin/admin-dashboard.tsx`, `apps/web/components/admin/redeem-code-manager.tsx`, `apps/web/components/admin/orders-table.tsx`, `apps/web/components/admin/users-table.tsx`, `apps/web/components/admin/prices-editor.tsx`, `apps/web/app/admin/layout.tsx`, `apps/web/app/admin/page.tsx`, `apps/web/app/admin/redeem-codes/page.tsx`, `apps/web/app/admin/orders/page.tsx`, `apps/web/app/admin/users/page.tsx`, `apps/web/app/admin/prices/page.tsx`, `CHANGELOG.md`.
+- Validation: `npm run build --workspace=apps/web`.
+- Risks/Next: The admin pages rely on the logged-in user being returned from `/api/auth/me` with `role: 'admin'`; bulk redeem-code history/list management is still generate-only and not yet a searchable CRUD console.
+
+### 2026-06-08 17:36 +08:00 - Codex
+- Summary: Added a redeem-code system that can grant user points or membership plans such as monthly, quarterly, and yearly cards.
+- Changed: Added `User.points` and `RedeemCode` to the Prisma schema, implemented redeem-code redemption and admin batch code generation on the API, and added a membership-page redeem form that can redeem points or membership and refresh the current account status.
+- Files: `apps/api/prisma/schema.prisma`, `apps/api/src/services/redeem.service.ts`, `apps/api/src/routes/membership/index.ts`, `apps/api/src/routes/admin/index.ts`, `apps/web/types/membership.ts`, `apps/web/lib/api/membership.ts`, `apps/web/hooks/useMembership.ts`, `apps/web/app/(app)/membership/page.tsx`, `CHANGELOG.md`.
+- Validation: `npx tsc --noEmit` in `apps/api`; `npm run build --workspace=apps/web`.
+- Risks/Next: The new schema needs a Prisma sync/migration before the redeem API can run against the local database; admin-side code generation currently exists as an API only and does not yet have a management UI.
+
+### 2026-06-08 17:18 +08:00 - Codex
+- Summary: Connected the web membership purchase flow to the existing backend payment API.
+- Changed: Switched frontend membership checkout requests from the generic `/api/orders/create` shape to the backend's real `/api/membership/purchase` contract, and aligned the frontend order response type with the returned `orderNo` and `amount` fields.
+- Files: `apps/web/lib/api/membership.ts`, `apps/web/types/membership.ts`, `CHANGELOG.md`.
+- Validation: `npm run build --workspace=apps/web`.
+- Risks/Next: This change wires the web purchase entry to the current backend API, but real payment success UX still depends on callback/webhook configuration and dedicated success/cancel pages.
+
+### 2026-06-08 17:02 +08:00 - Codex
+- Summary: Fixed three logic bugs across illustration and video generation after a full frontend/backend review.
+- Changed: Restricted completed video reuse to requests with matching `audioType` and `voiceId`, changed illustration quota checks to count only scenes that still need generation, and updated the create/generate retry flow to send the storyboard scene index instead of assuming `order - 1` is always the backend scene key.
+- Files: `apps/api/src/services/video.service.ts`, `apps/api/src/routes/illustration/index.ts`, `apps/web/app/(app)/create/generate/page.tsx`, `CHANGELOG.md`.
+- Validation: `npx tsc --noEmit` in `apps/api`; `npx tsc --noEmit` in `apps/web`; `npm run build --workspace=apps/web`.
+- Risks/Next: Video reuse still intentionally treats each `(storyId, audioType, voiceId)` combination as a separate render target; if the product wants a single canonical video per story regardless of voice choice, the API contract should be simplified to match.
+
+### 2026-06-08 16:33 +08:00 - Codex
+- Summary: Fixed the web production build by isolating app-only client providers from root error routes and re-aligning the workspace frontend dependencies.
+- Changed: Moved the authenticated navbar/toast shell out of the root layout into the `(app)` segment layout so 404 and global error rendering stay minimal, fixed the missing `useCallback` dependency on the create/generate page, and refreshed workspace installs to remove the broken mixed npm/pnpm React/Next dependency tree.
+- Files: `apps/web/app/layout.tsx`, `apps/web/app/(app)/layout.tsx`, `apps/web/components/layout/app-shell.tsx`, `apps/web/app/(app)/create/generate/page.tsx`, `package-lock.json`, `CHANGELOG.md`.
+- Validation: `npx tsc --noEmit` in `apps/web` passed; `npm install` at repo root completed; `npm ls react react-dom next --workspace=apps/web` passed cleanly; `npm run build --workspace=apps/web` passed.
+- Risks/Next: The build issue was caused by an inconsistent frontend install state; avoid mixing package managers for this workspace and re-run `npm install` if the web dependency tree becomes inconsistent again.
+
+### 2026-06-08 14:54 +08:00 - Codex
+- Summary: Added a mobile-focused frontend experience while preserving the existing desktop UI and feature set.
+- Changed: Added mobile bottom navigation and a mobile more menu, introduced a compact mobile workbench homepage, tightened the mobile layouts for the create flow, gallery, story reader, assets, voices, membership, auth pages, uploaders, pricing, template, illustration, and stylizer components, and added simple app-level 404/500 fallbacks.
+- Files: `apps/web/components/ui/nav-bar.tsx`, `apps/web/app/globals.css`, `apps/web/app/(app)/page.tsx`, `apps/web/app/(app)/create/upload/page.tsx`, `apps/web/app/(app)/create/stylize/page.tsx`, `apps/web/app/(app)/create/story/page.tsx`, `apps/web/app/(app)/create/generate/page.tsx`, `apps/web/components/ui/creation-stepper.tsx`, `apps/web/components/ui/photo-uploader.tsx`, `apps/web/components/ui/character-stylizer.tsx`, `apps/web/components/story/template-grid.tsx`, `apps/web/components/story/story-input.tsx`, `apps/web/app/(app)/gallery/page.tsx`, `apps/web/app/(app)/gallery/[id]/page.tsx`, `apps/web/app/(app)/assets/page.tsx`, `apps/web/app/(app)/voices/page.tsx`, `apps/web/app/(app)/membership/page.tsx`, `apps/web/app/(auth)/login/page.tsx`, `apps/web/app/(auth)/register/page.tsx`, `apps/web/components/auth/PhoneRegisterForm.tsx`, `apps/web/components/voice/VoiceUploader.tsx`, `apps/web/components/ui/pricing-table.tsx`, `apps/web/components/illustration/IllustrationCard.tsx`, `apps/web/app/not-found.tsx`, `apps/web/app/global-error.tsx`, `CHANGELOG.md`.
+- Validation: `npx tsc --noEmit` in `apps/web` passed; `npm run build --workspace=apps/web` compiled and typechecked successfully but failed while prerendering Next's default `/404` `_error` page with `Cannot read properties of null (reading 'useContext')`; `npm ls react react-dom next --workspace=apps/web` reports the current React/ReactDOM/Next dependency tree has invalid and extraneous peer entries.
+- Risks/Next: Production web build still needs the Next/React dependency or default error-page prerender issue resolved; mobile UI needs real-device/browser QA.
+
+### 2026-06-08 13:30 +08:00 - Codex
+- Summary: Fixed duplicate illustration/video generation requests and recovered the stuck video render for the restored Kua Fu story.
+- Changed: Made full-story illustration generation idempotent for existing pending/processing/completed scenes, prevented non-force illustration upserts from resetting active rows, reused active pending/processing video records instead of creating duplicates, preserved `Video.audioUrl` when marking videos completed, marked two stale processing video rows as failed, and regenerated the completed MP4 for `cmq3hrrqy000ags9wtgvv7vgb`.
+- Files: `apps/api/src/routes/illustration/index.ts`, `apps/api/src/services/illustration.service.ts`, `apps/api/src/services/video.service.ts`, `apps/api/prisma/dev.db`, `CHANGELOG.md`.
+- Validation: `npx tsc --noEmit` in `apps/api` passed; `npx tsc --noEmit` in `apps/web` passed; restarted `npm run dev:api`; repeated `POST /api/stories/cmq3hrrqy000ags9wtgvv7vgb/illustrate` returned `queuedCount: 0` with `reusedExisting: true`; regenerated video `cmq4rux8x0002uv47j8o9ior0` successfully as a 1024x768 MP4; repeated `POST /api/stories/cmq3hrrqy000ags9wtgvv7vgb/video` reused the completed video.
+- Risks/Next: Stale processing videos older than a timeout are still handled manually; a future cleanup job could mark interrupted inline renders failed automatically after API restarts.
+
+### 2026-06-07 16:07 +08:00 - Codex
+- Summary: Fixed story-generation false failures caused by LLM storyboard JSON containing raw newline control characters inside subtitle strings.
+- Changed: Added JSON-string control-character escaping before parsing LLM story payloads, clarified the subtitle prompt to require `\\n` escapes inside JSON strings, shortened future incomplete-story error messages to high-signal summaries, recovered failed story `cmq3hrrqy000ags9wtgvv7vgb` from the captured 9-scene storyboard, and restarted the API dev service with the parser fix.
+- Files: `apps/api/src/services/ai.service.ts`, `apps/api/prisma/dev.db`, `CHANGELOG.md`.
+- Validation: Replayed the captured failed response from `cmq3hrrqy000ags9wtgvv7vgb` through the fixed parser and recovered 9 scenes; `npx tsc --noEmit` in `apps/api` passed; `npx tsc --noEmit` in `apps/web` passed; restarted `npm run dev:api`; `GET /api/stories/cmq3hrrqy000ags9wtgvv7vgb/progress` now returns `status: completed`.
+- Risks/Next: The parser now repairs raw newline/tab/carriage-return control characters in JSON strings, but other malformed JSON shapes may still need targeted recovery if new provider outputs expose them.
+
+### 2026-06-07 15:58 +08:00 - Codex
+- Summary: Persisted story-generation failure reasons so failed create flows no longer only show a generic message.
+- Changed: Added `Story.errorMessage`, saved the background story-generation exception message when marking a story failed, returned the reason from the story progress API, and displayed it on the create/generate failure panel.
+- Files: `apps/api/prisma/schema.prisma`, `apps/api/src/routes/story/index.ts`, `apps/web/types/story.ts`, `apps/web/lib/api/story.ts`, `apps/web/app/(app)/create/generate/page.tsx`, `CHANGELOG.md`.
+- Validation: `npx prisma db push` synced the SQLite schema but Prisma client generation was initially blocked by the running API process; stopped the API dev process, ran `npx prisma generate`, `npx tsc --noEmit` in `apps/api`, `npx tsc --noEmit` in `apps/web`, restarted `npm run dev:api`, and confirmed `GET /api/stories/cmq3hdwxe00hgdhlzhu37or47/progress` returns the new `errorMessage` field.
+- Risks/Next: Existing failed stories from before this change still have `errorMessage: null`; the real cause will be captured on future failures.
+
+### 2026-06-06 16:14 +08:00 - Codex
+- Summary: Improved video-generation UX and stabilized the local dev services after the gallery page became hard to open.
+- Changed: Cleaned up duplicate local web/API dev processes and restarted one clean service pair; the video panel now carries video metadata through the gallery state, shows clearer ready/processing/failed/not-ready states, exposes a direct MP4 save action for completed videos, displays illustration/audio readiness before generation, and prevents duplicate video renders by reusing the latest completed video on repeat POSTs.
+- Files: `apps/web/types/story.ts`, `apps/web/lib/api/story.ts`, `apps/web/hooks/useGallery.ts`, `apps/web/app/(app)/gallery/[id]/page.tsx`, `apps/api/src/services/video.service.ts`, `apps/api/src/routes/video/index.ts`.
+- Validation: `npx tsc --noEmit` in `apps/web` passed; `npx tsc --noEmit` in `apps/api` passed; `GET /gallery/cmq0o1fai004z13xl2f2ig63r` returned 200; `GET /api/stories/cmq0o1fai004z13xl2f2ig63r/video` returned completed MP4 metadata; repeat `POST /api/stories/cmq0o1fai004z13xl2f2ig63r/video` returned `reusedExisting: true` in ~2s; fresh PDF export now has 9 pages instead of the old desktop sample's 17 pages.
+- Risks/Next: Video progress is still estimated at the frontend level for inline ffmpeg renders; true granular progress would require backend progress events or polling a persisted progress field.
+
 ### 2026-06-05 22:25 +08:00 - MiniMax
 - Summary: Fixed the "生成视频故事" button not showing on the gallery page. Root cause: `VideoProgress` component has a hard-coded early return at `status === 'pending' && progress === 0` that renders a static "视频尚未生成" placeholder, swallowing the entire branch. The page-level button was being routed around it.
 - Changed:
