@@ -8,9 +8,10 @@ import { useAuthContext } from '@/providers/AuthProvider';
 interface PhoneLoginFormProps {
   onSuccess?: () => void;
   onError?: (error: string) => void;
+  hideTestShortcut?: boolean;
 }
 
-export function PhoneLoginForm({ onSuccess, onError }: PhoneLoginFormProps) {
+export function PhoneLoginForm({ onSuccess, onError, hideTestShortcut = false }: PhoneLoginFormProps) {
   const { sendCode, loginWithPhone } = useAuthContext();
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
@@ -97,9 +98,11 @@ export function PhoneLoginForm({ onSuccess, onError }: PhoneLoginFormProps) {
 
   return (
     <div className="space-y-4">
-      <Button type="button" variant="outline" onClick={fillTestAccount} className="w-full border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white">
-        一键填入测试账号
-      </Button>
+      {!hideTestShortcut && (
+        <Button type="button" variant="outline" onClick={fillTestAccount} className="w-full border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white">
+          一键填入测试账号
+        </Button>
+      )}
 
       <div className="space-y-2">
         <label htmlFor="phone" className="text-sm font-medium text-white/85">

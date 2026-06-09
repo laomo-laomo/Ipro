@@ -35,16 +35,16 @@ export function PricingTable({ plans = MEMBERSHIP_PLANS, currentTier, onPurchase
   const getSelectedPlanName = () => plans.find((plan) => plan.id === selectedPlan)?.name || '';
 
   return (
-    <div className="space-y-8">
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="space-y-5 md:space-y-8">
+      <div className="grid gap-3 sm:grid-cols-2 md:gap-6 lg:grid-cols-4">
         {plans.map((plan) => (
           <MembershipCard key={plan.id} plan={plan} isCurrentPlan={plan.id === currentTier} onPurchase={handlePlanClick} isLoading={isPurchasing && selectedPlan === plan.id} />
         ))}
       </div>
 
       {showChannelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
-          <div className="w-full max-w-md rounded-[28px] border border-white/60 bg-[#fffaf3] p-6 shadow-[0_30px_80px_-30px_rgba(76,29,149,0.45)]">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:items-center sm:px-4 sm:pb-0">
+          <div className="w-full max-w-md rounded-[26px] border border-white/60 bg-[#fffaf3] p-5 shadow-[0_30px_80px_-30px_rgba(76,29,149,0.45)] md:rounded-[28px] md:p-6">
             <div className="text-center">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-amber-400 text-white shadow-magic">
                 <Crown className="h-6 w-6" />

@@ -16,8 +16,8 @@ import type { StyleType } from '@/types/character';
 function StylizeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const characterId = searchParams.get('characterId');
-  const storyId = searchParams.get('storyId');
+  const characterId = searchParams?.get('characterId') ?? null;
+  const storyId = searchParams?.get('storyId') ?? null;
   const { success: showToast } = useToast();
 const { story, loadStory } = useStory();
   const [selectedStyle, setSelectedStyle] = useState<StyleType>('pixar');
@@ -64,14 +64,14 @@ const stylizeLockRef = useRef(false);
   }, [characterId, storyId, router, isStylizing]);
 
   return (
-    <div className="page-shell page-enter space-y-6 pb-28">
+    <div className="page-shell page-enter space-y-5 pb-36 md:space-y-6 md:pb-28">
       <FadeIn>
-        <section className="space-y-4">
+        <section className="space-y-3 md:space-y-4">
           <CreationStepper current="stylize" characterId={characterId || undefined} storyId={storyId || undefined} />
           <div>
             <p className="text-sm font-medium text-rose-600">第二步</p>
-            <h1 className="mt-2 text-4xl font-bold">给主角挑一种绘本里的模样</h1>
-            <p className="mt-3 max-w-2xl text-base leading-8 text-muted-foreground">从皮克斯感、手绘感到更梦幻的童话画风，这一步决定整本绘本的情绪和气质。{story?.title ? ` 当前故事：${story.title}` : ''}</p>
+            <h1 className="mt-2 text-3xl font-bold leading-tight md:text-4xl">给主角挑一种绘本里的模样</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground md:mt-3 md:text-base md:leading-8">从皮克斯感、手绘感到更梦幻的童话画风，这一步决定整本绘本的情绪和气质。{story?.title ? ` 当前故事：${story.title}` : ''}</p>
           </div>
         </section>
       </FadeIn>
@@ -134,7 +134,7 @@ const stylizeLockRef = useRef(false);
 
 {/* Fixed bottom action bar */}
       {stylizeDone && character?.stylizedPhotoUrl && (
-        <div className="fixed bottom-16 left-0 right-0 z-40 border-t border-white/70 bg-white/90 backdrop-blur-xl shadow-lg">
+        <div className="mobile-action-bar md:bottom-16">
           <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
             <Button onClick={handleContinue} className="flex-1 rounded-full" size="lg" variant="magic">
               <ArrowRight className="h-4 w-4" /> 确认风格，继续选故事

@@ -69,10 +69,10 @@ export function PhotoUploader({
 
   if (previewUrl) {
     return (
-      <div className={cn('rounded-[30px] border border-white/70 bg-white/80 p-5 shadow-paper backdrop-blur-xl', className)}>
-        <div className="grid gap-5 sm:grid-cols-[220px_1fr] sm:items-center">
-          <div className="relative mx-auto aspect-[4/5] w-full max-w-[220px] overflow-hidden rounded-[26px] border border-white/70 bg-gradient-to-br from-violet-100 to-amber-50 p-2 shadow-sm">
-            <div className="relative h-full overflow-hidden rounded-[20px] bg-white">
+      <div className={cn('rounded-[24px] border border-white/70 bg-white/82 p-4 shadow-paper backdrop-blur-xl md:rounded-[30px] md:p-5', className)}>
+        <div className="grid gap-4 sm:grid-cols-[220px_1fr] sm:items-center md:gap-5">
+          <div className="relative mx-auto aspect-[4/5] w-full max-w-[180px] overflow-hidden rounded-[22px] border border-white/70 bg-gradient-to-br from-violet-100 to-amber-50 p-2 shadow-sm sm:max-w-[220px] md:rounded-[26px]">
+            <div className="relative h-full overflow-hidden rounded-[16px] bg-white md:rounded-[20px]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={previewUrl} alt="预览" className="h-full w-full object-cover" />
               {isUploading && (
@@ -91,7 +91,7 @@ export function PhotoUploader({
           <div className="space-y-4">
             <div>
               <p className="text-sm font-medium text-violet-700">照片已就位</p>
-              <h3 className="mt-1 text-2xl font-bold">主角准备走进童话世界</h3>
+              <h3 className="mt-1 text-xl font-bold md:text-2xl">主角准备走进童话世界</h3>
               <p className="mt-2 text-sm leading-7 text-muted-foreground">确认照片没问题后继续下一步，我们会自动识别角色特征并进入风格化阶段。</p>
             </div>
             {onClear && !isUploading && (
@@ -110,7 +110,7 @@ export function PhotoUploader({
     <div
       {...getRootProps()}
       className={cn(
-        'relative overflow-hidden rounded-[32px] border-2 border-dashed p-8 transition-all duration-200',
+        'relative overflow-hidden rounded-[24px] border-2 border-dashed p-5 transition-all duration-200 md:rounded-[32px] md:p-8',
         isDragActive
           ? 'border-violet-500 bg-gradient-to-br from-violet-50 to-amber-50 shadow-magic'
           : 'border-violet-200 bg-white/72 hover:border-violet-400 hover:bg-white/82 hover:shadow-paper',
@@ -120,11 +120,11 @@ export function PhotoUploader({
     >
       <input {...getInputProps()} />
 
-      <div className="mx-auto flex min-h-[340px] max-w-xl flex-col items-center justify-center text-center">
-        <div className={cn('mb-6 flex h-24 w-24 items-center justify-center rounded-[30px] transition-all', isDragActive ? 'bg-violet-100 text-violet-700' : 'bg-gradient-to-br from-violet-100 to-amber-50 text-violet-600')}>
-          {isDragActive ? <Camera className="h-10 w-10" /> : <Upload className="h-10 w-10" />}
+      <div className="mx-auto flex min-h-[270px] max-w-xl flex-col items-center justify-center text-center md:min-h-[340px]">
+        <div className={cn('mb-5 flex h-20 w-20 items-center justify-center rounded-[24px] transition-all md:mb-6 md:h-24 md:w-24 md:rounded-[30px]', isDragActive ? 'bg-violet-100 text-violet-700' : 'bg-gradient-to-br from-violet-100 to-amber-50 text-violet-600')}>
+          {isDragActive ? <Camera className="h-8 w-8 md:h-10 md:w-10" /> : <Upload className="h-8 w-8 md:h-10 md:w-10" />}
         </div>
-        <h3 className="text-2xl font-bold">{isDragActive ? '松开就能把照片放进故事里' : '拖拽或点击上传照片'}</h3>
+        <h3 className="text-xl font-bold md:text-2xl">{isDragActive ? '松开就能把照片放进故事里' : '拖拽或点击上传照片'}</h3>
         <p className="mt-3 max-w-md text-sm leading-7 text-muted-foreground">上传宝宝的照片，TA 将成为童话故事的主角。建议使用正面、清晰、光线自然的单人照。</p>
         <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-violet-50 px-4 py-2 text-xs font-medium text-violet-700">
           <Sparkles className="h-4 w-4" />

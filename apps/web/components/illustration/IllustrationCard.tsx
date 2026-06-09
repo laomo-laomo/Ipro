@@ -68,7 +68,7 @@ export function IllustrationCard({ story, onDelete }: IllustrationCardProps) {
 
   return (
     <div
-      className="group relative overflow-hidden rounded-[32px] border border-white/60 bg-gradient-to-b from-white/95 to-white/80 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-2 hover:shadow-xl"
+      className="group relative overflow-hidden rounded-[24px] border border-white/60 bg-gradient-to-b from-white/95 to-white/80 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-2 hover:shadow-xl md:rounded-[32px]"
       onMouseEnter={() => setShowDelete(true)}
       onMouseLeave={() => setShowDelete(false)}
     >
@@ -94,7 +94,7 @@ export function IllustrationCard({ story, onDelete }: IllustrationCardProps) {
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
           
           {/* 状态标签 */}
-          <div className="absolute left-4 top-4">
+          <div className="absolute left-3 top-3 md:left-4 md:top-4">
             <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold shadow-lg backdrop-blur-sm ${getStatusColor(story.status)}`}>
               {getStatusLabel(story.status)}
             </span>
@@ -102,7 +102,7 @@ export function IllustrationCard({ story, onDelete }: IllustrationCardProps) {
 
           {/* 视频标签 */}
           {hasVideo && (
-            <div className="absolute right-4 top-4">
+            <div className="absolute right-3 top-3 md:right-4 md:top-4">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-violet-700 shadow-lg backdrop-blur-sm">
                 <Video className="h-3.5 w-3.5" />
                 含视频
@@ -138,24 +138,24 @@ export function IllustrationCard({ story, onDelete }: IllustrationCardProps) {
       )}
 
       {/* 内容区域 */}
-      <div className="p-5">
+      <div className="p-4 md:p-5">
         {/* 标题 */}
         <Link href={`/gallery/${story.id}`}>
-          <h3 className="text-xl font-bold text-gray-800 line-clamp-1 transition-colors hover:text-rose-500">
+          <h3 className="line-clamp-1 text-lg font-bold text-gray-800 transition-colors hover:text-rose-500 md:text-xl">
             {story.title}
           </h3>
         </Link>
 
         {/* 故事内容预览 - 绘本风格居中 */}
         {storyPreview && (
-          <div className="relative mt-6 overflow-hidden rounded-2xl">
+          <div className="relative mt-4 overflow-hidden rounded-2xl md:mt-6">
             {/* 渐变背景 */}
             <div className="absolute inset-0 bg-gradient-to-br from-rose-50/60 via-white/80 to-amber-50/40" />
             
             {/* 内容区域 */}
-            <div className="relative p-6">
+            <div className="relative p-4 md:p-6">
               {/* 场景标题 */}
-              <h4 className="mb-4 text-center text-xl font-bold text-rose-500">
+              <h4 className="mb-3 text-center text-lg font-bold text-rose-500 md:mb-4 md:text-xl">
                 {story.segments[0]?.title || '开场'}
               </h4>
               
@@ -164,7 +164,7 @@ export function IllustrationCard({ story, onDelete }: IllustrationCardProps) {
                 <div className="absolute -left-2 top-0 text-4xl font-serif text-rose-200/50">&ldquo;</div>
                 <div className="absolute -right-2 bottom-0 rotate-180 text-4xl font-serif text-rose-200/50">&ldquo;</div>
                 
-                <p className="relative z-10 text-center text-base leading-8 text-gray-700 line-clamp-3">
+                <p className="relative z-10 line-clamp-3 text-center text-sm leading-7 text-gray-700 md:text-base md:leading-8">
                   {storyPreview}
                 </p>
               </div>
@@ -180,8 +180,8 @@ export function IllustrationCard({ story, onDelete }: IllustrationCardProps) {
         )}
 
         {/* 底部信息栏 */}
-        <div className="mt-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="mt-4 flex items-center justify-between md:mt-6">
+          <div className="flex flex-wrap items-center gap-2 md:gap-3">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-600">
               <ImageIcon className="h-3.5 w-3.5" />
               {illustrationCount}张

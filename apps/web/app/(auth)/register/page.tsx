@@ -19,19 +19,19 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-violet-700 via-fuchsia-500 to-amber-400 px-4 py-10">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-violet-700 via-fuchsia-500 to-amber-400 px-4 py-8 md:py-10">
       <FloatingParticles count={12} />
-      <div className="relative z-10 w-full max-w-md space-y-8">
+      <div className="relative z-10 w-full max-w-md space-y-5 md:space-y-8">
         <div className="text-center text-white">
-          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-[28px] bg-white/16 shadow-paper backdrop-blur-xl">
-            <BookOpen className="h-10 w-10" />
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[24px] bg-white/20 shadow-paper backdrop-blur-xl md:mb-5 md:h-20 md:w-20 md:rounded-[28px]">
+            <BookOpen className="h-8 w-8 md:h-10 md:w-10" />
           </div>
           <p className="storybook-title text-3xl">IPro</p>
-          <h1 className="mt-3 text-3xl font-bold">开启你的童话创作之旅</h1>
+          <h1 className="mt-3 text-2xl font-bold md:text-3xl">开启你的童话创作之旅</h1>
           <p className="mt-2 text-sm text-white/80">注册后就能把孩子、家人和想象力一起装进一本专属绘本里。</p>
         </div>
 
-        <GlassCard className="border-white/25 bg-white/18 p-8 text-white backdrop-blur-2xl">
+        <GlassCard className="border-white/25 bg-white/20 p-5 text-white backdrop-blur-2xl md:p-8">
           {error && (
             <div className="mb-4 rounded-2xl border border-white/20 bg-white/15 p-3 text-sm text-white">
               {error}

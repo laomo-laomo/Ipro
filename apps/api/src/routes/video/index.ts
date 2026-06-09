@@ -104,6 +104,26 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
         voice,
       });
 
+      if (status === 'completed') {
+        const existing = await prisma.video.findUnique({ where: { id: videoId } });
+        return reply.send({
+          success: true,
+          data: {
+            videoId,
+            jobId: null,
+            status,
+            charCount,
+            estimatedCost: 0,
+            videoUrl: existing?.videoUrl,
+            audioUrl: existing?.audioUrl,
+            duration: existing?.duration,
+            resolution: existing?.resolution,
+            fileSize: existing?.fileSize,
+            reusedExisting: true,
+          },
+        });
+      }
+
       const jobData = {
         videoId,
         storyId,

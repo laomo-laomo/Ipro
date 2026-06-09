@@ -183,6 +183,23 @@ function createRevisedPrompt(originalPrompt: string, error: unknown, attempt: nu
   return normalizeWhitespace(revised);
 }
 
+function buildPromptScene(scene: Scene): { description: string; text: string } {
+  const visualReference = scene.imagePrompt?.trim();
+  const imagePromptLooksGenerated = visualReference
+    ? visualReference.includes('PICTURE-BOOK CAPTION AREA IS REQUIRED')
+      || visualReference.includes('Primary scene:')
+      || visualReference.includes('Specific visual beat:')
+      || visualReference.length > 600
+    : false;
+
+  return {
+    description: visualReference && !imagePromptLooksGenerated
+      ? `${scene.description}. Visual reference prompt: ${visualReference}`
+      : scene.description,
+    text: scene.text,
+  };
+}
+
 /**
  * LLM-based prompt rewriting as fallback when hardcoded replacements still fail
  */
@@ -316,7 +333,8 @@ export async function getStoryScenes(storyId: string): Promise<Scene[]> {
  */
 export async function createIllustrationRecords(
   storyId: string,
-  sceneIndices: number[]
+  sceneIndices: number[],
+  options: { force?: boolean } = {},
 ): Promise<{ count: number; totalScenes: number }> {
   const scenes = await getStoryScenes(storyId);
 
@@ -338,20 +356,24 @@ export async function createIllustrationRecords(
           sceneIndex: illustration.sceneIndex,
         },
       },
-      update: {
-        status: 'pending',
-        imageUrl: null,
-        errorMessage: null,
-        failureCategory: null,
-      },
+      update: options.force
+        ? {
+            status: 'pending',
+            imageUrl: null,
+            errorMessage: null,
+            failureCategory: null,
+          }
+        : {},
       create: illustration,
     });
   }
 
-  await prisma.story.update({
-    where: { id: storyId },
-    data: { status: 'processing' },
-  });
+  if (illustrations.length > 0) {
+    await prisma.story.update({
+      where: { id: storyId },
+      data: { status: 'processing' },
+    });
+  }
 
   return {
     count: sceneIndices.length,
@@ -421,12 +443,7 @@ export async function generateSceneIllustration(
     throw new Error(`Illustration record for scene ${sceneIndex} not found`);
   }
 
-  const promptScene = {
-    description: scene.imagePrompt
-      ? `${scene.description}. Visual reference prompt: ${scene.imagePrompt}`
-      : scene.description,
-    text: scene.text,
-  };
+  const promptScene = buildPromptScene(scene);
   const originalPrompt = buildVisualScenePrompt(promptScene, {
     title: story.title,
     characterStyle,
@@ -461,7 +478,6 @@ export async function generateSceneIllustration(
         ...storyboard,
         scenes: storyboard.scenes.map((storyboardScene) => storyboardScene.index === sceneIndex ? {
           ...storyboardScene,
-          imagePrompt: currentPrompt,
           image: {
             ...storyboardScene.image,
             prompt: currentPrompt,
@@ -534,7 +550,6 @@ export async function generateSceneIllustration(
         ...storyboard,
         scenes: storyboard.scenes.map((storyboardScene) => storyboardScene.index === sceneIndex ? {
           ...storyboardScene,
-          imagePrompt: currentPrompt,
           image: {
             ...storyboardScene.image,
             prompt: currentPrompt,

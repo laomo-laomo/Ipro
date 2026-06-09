@@ -21,7 +21,7 @@ type SelectionMode = 'template' | 'custom';
 function StoryContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const characterId = searchParams.get('characterId');
+  const characterId = searchParams?.get('characterId') ?? null;
   const { success: showToast, error: showError } = useToast();
 
   const { isGenerating, generationError, error, generateFromTemplate, generateFromCustomTitle, reset } = useStory();
@@ -118,15 +118,15 @@ const handleTemplateGenerate = useCallback(async () => {
   }
 
   return (
-    <div className="page-shell page-enter space-y-6 pb-28">
+    <div className="page-shell page-enter space-y-5 pb-36 md:space-y-6 md:pb-28">
       <FadeIn>
-        <section className="space-y-4">
+        <section className="space-y-3 md:space-y-4">
           <CreationStepper current="story" characterId={characterId} />
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between md:gap-4">
             <div>
               <p className="text-sm font-medium text-amber-600">第三步</p>
-              <h1 className="mt-2 text-4xl font-bold">现在，挑一本要讲给孩子听的故事</h1>
-              <p className="mt-3 max-w-2xl text-base leading-8 text-muted-foreground">可以直接选经典童话模板，也可以用一句你自己的灵感，把这本绘本变成完全独一无二的冒险。</p>
+              <h1 className="mt-2 text-3xl font-bold leading-tight md:text-4xl">现在，挑一本要讲给孩子听的故事</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground md:mt-3 md:text-base md:leading-8">可以直接选经典童话模板，也可以用一句你自己的灵感，把这本绘本变成完全独一无二的冒险。</p>
             </div>
             <Button variant="outline" size="sm" onClick={() => router.push(`/create/stylize?characterId=${characterId}`)} className="rounded-full">
               <ArrowLeft className="h-4 w-4" />
@@ -139,7 +139,7 @@ const handleTemplateGenerate = useCallback(async () => {
       <div className="grid gap-6 lg:grid-cols-1">
         <div className="space-y-6">
           <FadeIn delay={0.05}>
-            <div className="inline-flex rounded-full border border-white/70 bg-white/80 p-1 shadow-sm">
+            <div className="grid w-full grid-cols-2 rounded-full border border-white/70 bg-white/80 p-1 shadow-sm sm:inline-flex sm:w-auto">
               <button onClick={() => setMode('template')} className={`rounded-full px-5 py-2 text-sm font-medium transition ${mode === 'template' ? 'bg-violet-600 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
                 <BookOpen className="mr-1 inline-block h-4 w-4" />
                 预设模板
@@ -171,7 +171,7 @@ const handleTemplateGenerate = useCallback(async () => {
 
       {/* Fixed bottom action bar */}
       {selectedTemplate && (
-        <div className="fixed bottom-16 left-0 right-0 z-40 border-t border-white/70 bg-white/90 backdrop-blur-xl shadow-lg">
+        <div className="mobile-action-bar md:bottom-16">
           <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
             <Button onClick={handleTemplateGenerate} disabled={isGenerating} className="flex-1 rounded-full" size="lg" variant="magic">
               {isGenerating ? (

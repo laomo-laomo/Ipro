@@ -4,11 +4,16 @@ import { prisma } from '../../config/database.js';
 import { MEMBERSHIP_PLANS } from '../../config/membership.js';
 import { createMembershipOrder } from '../../services/payment.service.js';
 import { getQuotaStatus } from '../../services/membership.service.js';
+import { redeemCode } from '../../services/redeem.service.js';
 
 
 const purchaseSchema = z.object({
   cardType: z.enum(['weekly', 'monthly', 'quarterly', 'yearly']),
   channel: z.enum(['wechat', 'alipay', 'stripe']).optional().default('wechat'),
+});
+
+const redeemSchema = z.object({
+  code: z.string().min(1).max(64),
 });
 
 /**
@@ -179,6 +184,40 @@ export async function membershipRoutes(app: FastifyInstance): Promise<void> {
         success: false,
         message: error.message || 'Failed to purchase membership',
         code: 'PURCHASE_ERROR',
+      });
+    }
+  });
+
+  /**
+   * POST /api/membership/redeem - Redeem a code for points or membership
+   */
+  app.post('/redeem', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.user!;
+      const body = redeemSchema.parse(request.body);
+
+      const result = await redeemCode(user.id, body.code);
+
+      return reply.send({
+        success: true,
+        data: result,
+      });
+    } catch (error: any) {
+      request.log.error(error);
+
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({
+          success: false,
+          message: 'Validation error',
+          code: 'VALIDATION_ERROR',
+          errors: error.errors,
+        });
+      }
+
+      return reply.status(400).send({
+        success: false,
+        message: error.message || '兑换失败',
+        code: 'REDEEM_ERROR',
       });
     }
   });

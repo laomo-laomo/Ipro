@@ -73,9 +73,9 @@ export default function AssetsPage() {
     return (
       <div className="page-shell page-enter">
         <FadeIn>
-          <GlassCard className="flex flex-col items-center justify-center py-24 text-center">
-            <Sparkles className="h-16 w-16 text-violet-300" />
-            <h2 className="mt-6 text-2xl font-bold">素材库还在等第一件收藏</h2>
+          <GlassCard className="flex flex-col items-center justify-center px-5 py-16 text-center md:py-24">
+            <Sparkles className="h-14 w-14 text-violet-300 md:h-16 md:w-16" />
+            <h2 className="mt-5 text-2xl font-bold md:mt-6">素材库还在等第一件收藏</h2>
             <p className="mt-3 max-w-md text-sm leading-7 text-muted-foreground">上传照片、生成角色和插画后，这里会慢慢长成你自己的童话资产库。</p>
             <MagicButton href="/create/upload" size="lg" className="mt-6 px-8">
               开始创作
@@ -87,12 +87,12 @@ export default function AssetsPage() {
   }
 
   return (
-    <div className="page-shell page-enter space-y-6">
+    <div className="page-shell page-enter space-y-5 md:space-y-6">
       <FadeIn>
         <section>
           <p className="text-sm font-medium text-violet-700">素材库</p>
-          <h1 className="mt-2 text-4xl font-bold">把照片、角色、插画和声音都收进同一个故事抽屉</h1>
-          <p className="mt-3 max-w-2xl text-base leading-8 text-muted-foreground">这里会保存你创作过程中的重要资产，方便后续继续生成、复用和延展。</p>
+          <h1 className="mt-2 text-3xl font-bold leading-tight md:text-4xl">把照片、角色、插画和声音都收进同一个故事抽屉</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground md:mt-3 md:text-base md:leading-8">这里会保存你创作过程中的重要资产，方便后续继续生成、复用和延展。</p>
         </section>
       </FadeIn>
 
@@ -115,7 +115,7 @@ export default function AssetsPage() {
         </div>
       </FadeIn>
 
-      <StaggerList className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+      <StaggerList className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4 lg:grid-cols-4">
         {filtered.map((asset) => {
           const imageUrl = resolveAssetUrl(asset.thumbnailUrl || '') || asset.thumbnailUrl;
           const isSelected = selected === asset.id;
@@ -124,9 +124,9 @@ export default function AssetsPage() {
             <StaggerItem key={asset.id}>
               <button
                 onClick={() => setSelected(isSelected ? null : asset.id)}
-                className={`group overflow-hidden rounded-[28px] border p-2 text-left transition-all duration-200 ${isSelected ? 'border-violet-400 bg-violet-50/80 shadow-magic scale-[1.01]' : 'border-white/70 bg-white/80 hover:-translate-y-1 hover:shadow-paper'}`}
+                className={`group overflow-hidden rounded-[22px] border p-1.5 text-left transition-all duration-200 md:rounded-[28px] md:p-2 ${isSelected ? 'border-violet-400 bg-violet-50/80 shadow-magic scale-[1.01]' : 'border-white/70 bg-white/80 hover:-translate-y-1 hover:shadow-paper'}`}
               >
-                <div className="relative aspect-[3/4] overflow-hidden rounded-[22px] bg-gradient-to-br from-violet-100 to-amber-50">
+                <div className="relative aspect-[3/4] overflow-hidden rounded-[18px] bg-gradient-to-br from-violet-100 to-amber-50 md:rounded-[22px]">
                   {imageUrl ? (
                     <Image src={imageUrl} alt={asset.name} fill className="object-cover transition-transform duration-300 group-hover:scale-105" sizes="(min-width:1024px) 25vw, 50vw" />
                   ) : (
@@ -135,7 +135,7 @@ export default function AssetsPage() {
                     </div>
                   )}
                 </div>
-                <div className="p-3">
+                <div className="p-2.5 md:p-3">
                   <p className="text-sm font-semibold line-clamp-1">{asset.name}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{new Date(asset.createdAt).toLocaleDateString('zh-CN')}</p>
                 </div>
@@ -147,10 +147,10 @@ export default function AssetsPage() {
 
       {selected && (
         <FadeIn>
-          <div className="sticky bottom-4 z-30">
-            <GlassCard className="mx-auto flex max-w-3xl items-center justify-between gap-4 p-4">
+          <div className="sticky bottom-[5.6rem] z-30 md:bottom-4">
+            <GlassCard className="mx-auto flex max-w-3xl flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground">已选择 1 项素材</p>
-              <div className="flex gap-2">
+              <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
                 <Button variant="outline" size="sm" onClick={() => setSelected(null)} className="rounded-full">取消</Button>
                 <Button size="sm" onClick={handleUse} className="rounded-full" variant="magic">
                   使用选中素材

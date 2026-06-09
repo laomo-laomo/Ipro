@@ -92,15 +92,48 @@ export async function illustrationRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      // Check if story already has illustrations (unless force=true)
       // Calculate how many illustrations will be created
-      const sceneCount = sceneIndices.length > 0 ? sceneIndices.length : await prisma.$transaction(async (tx) => {
-        const storyboard = normalizeStoryboard(story.scenes, story.title);
-        return storyboard.scenes.length;
-      });
+      const storyboard = normalizeStoryboard(story.scenes, story.title);
+      const targetSceneIndices = sceneIndices.length > 0
+        ? sceneIndices
+        : storyboard.scenes.map((scene) => scene.index);
+      let existingActiveOrCompleted: Array<{ sceneIndex: number; status: string }> = [];
+      if (!force) {
+        existingActiveOrCompleted = await prisma.illustration.findMany({
+          where: {
+            storyId,
+            sceneIndex: { in: targetSceneIndices },
+            status: { in: ['pending', 'processing', 'completed'] },
+          },
+          select: { sceneIndex: true, status: true },
+        });
 
-      // Check quota before creating illustrations
-      const quotaCheck = await checkQuota(userId, sceneCount);
+        if (existingActiveOrCompleted.length >= targetSceneIndices.length && sceneIndices.length === 0) {
+          const processingCount = existingActiveOrCompleted.filter((item) => item.status === 'pending' || item.status === 'processing').length;
+          const completedCount = existingActiveOrCompleted.filter((item) => item.status === 'completed').length;
+
+          return reply.send({
+            success: true,
+            data: {
+              storyId,
+              totalScenes: targetSceneIndices.length,
+              queuedCount: 0,
+              reusedExisting: true,
+              completedCount,
+              processingCount,
+            },
+          });
+        }
+      }
+
+      // Create/update illustration records
+      const activeOrCompletedSceneIndices = new Set(existingActiveOrCompleted.map((item) => item.sceneIndex));
+      const sceneIndicesToGenerate = force
+        ? targetSceneIndices
+        : targetSceneIndices.filter((index) => !activeOrCompletedSceneIndices.has(index));
+
+      // Check quota only for scenes that actually need generation.
+      const quotaCheck = await checkQuota(userId, sceneIndicesToGenerate.length);
       console.log(`[Illustrate] quotaCheck:`, JSON.stringify(quotaCheck));
       if (!quotaCheck.hasQuota) {
         // Dev override: skip quota check in development
@@ -114,26 +147,19 @@ export async function illustrationRoutes(app: FastifyInstance): Promise<void> {
           });
         }
       }
-      if (!force) {
-        const existingIllustrations = await prisma.illustration.findMany({
-          where: { storyId, status: 'completed' },
+
+      const { count, totalScenes } = await createIllustrationRecords(storyId, sceneIndicesToGenerate, { force });
+
+      if (count === 0) {
+        return reply.send({
+          success: true,
+          data: { storyId, totalScenes, queuedCount: 0, reusedExisting: true },
         });
-
-        if (existingIllustrations.length > 0 && sceneIndices.length === 0) {
-          return reply.status(400).send({
-            success: false,
-            message: 'Story already has illustrations. Set force=true to regenerate.',
-            code: 'ALREADY_EXISTS',
-          });
-        }
       }
-
-      // Create/update illustration records
-      const { count, totalScenes } = await createIllustrationRecords(storyId, sceneIndices);
 
       // Get all illustration records to queue
       const illustrations = await prisma.illustration.findMany({
-        where: { storyId },
+        where: { storyId, sceneIndex: { in: sceneIndicesToGenerate } },
         orderBy: { sceneIndex: 'asc' },
       });
 

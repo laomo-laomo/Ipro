@@ -10,9 +10,11 @@ import { useCharacter } from '@/hooks/useCharacter';
 import { useToast } from '@/components/ui/toast';
 import { createPreviewUrl, revokePreviewUrl } from '@/lib/utils';
 import { FadeIn } from '@/components/motion';
+import { useAuthContext } from '@/providers/AuthProvider';
 
 export default function UploadPage() {
   const router = useRouter();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuthContext();
   const { success: showToast, error: showError } = useToast();
   const { uploadPhoto, isUploading, uploadProgress, uploadError, error, reset, characters, loadCharacters, removeCharacter } = useCharacter();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -20,7 +22,10 @@ export default function UploadPage() {
   const [selectedExistingId, setSelectedExistingId] = useState<string | null>(null);
   const [albumOpen, setAlbumOpen] = useState(false);
 
-  useEffect(() => { loadCharacters(); }, [loadCharacters]);
+  useEffect(() => {
+    if (isAuthLoading || !isAuthenticated) return;
+    loadCharacters();
+  }, [isAuthLoading, isAuthenticated, loadCharacters]);
 
   const handleFileSelect = useCallback((file: File) => {
     if (previewUrl) revokePreviewUrl(previewUrl);
@@ -73,14 +78,14 @@ export default function UploadPage() {
   const hasSelection = selectedFile || selectedExistingId;
 
   return (
-    <div className="page-shell page-enter space-y-6 pb-28">
+    <div className="page-shell page-enter space-y-5 md:space-y-6">
       <FadeIn>
-        <section className="space-y-4">
+        <section className="space-y-3 md:space-y-4">
           <CreationStepper current="upload" />
           <div>
             <p className="text-sm font-medium text-violet-700">第一步</p>
-            <h1 className="mt-2 text-4xl font-bold">选择主角的照片</h1>
-            <p className="mt-3 max-w-2xl text-base leading-8 text-muted-foreground">上传新照片，或从相册选择已有的。</p>
+            <h1 className="mt-2 text-3xl font-bold leading-tight md:text-4xl">选择主角的照片</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground md:mt-3 md:text-base md:leading-8">上传新照片，或从相册选择已有的。</p>
           </div>
         </section>
       </FadeIn>
@@ -90,7 +95,7 @@ export default function UploadPage() {
         <FadeIn delay={0.05}>
           <button
             onClick={() => setAlbumOpen(!albumOpen)}
-            className="group w-full overflow-hidden rounded-[28px] border border-white/70 bg-white/80 shadow-paper transition-all hover:shadow-lg text-left"
+            className="group w-full overflow-hidden rounded-[24px] border border-white/70 bg-white/85 text-left shadow-paper transition-all hover:shadow-lg md:rounded-[28px]"
           >
             <div className="relative h-28 sm:h-32 overflow-hidden">
               {firstPhoto ? (
@@ -120,12 +125,12 @@ export default function UploadPage() {
       {/* Album content (expanded) */}
       {albumOpen && (
         <FadeIn delay={0.02}>
-          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+          <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-5 md:gap-3 lg:grid-cols-6">
             {characters.map((c) => (
               <button
                 key={c.id}
                 onClick={() => handleSelectExisting(c.id)}
-                className={`group relative aspect-square overflow-hidden rounded-[20px] border-2 transition-all ${
+                className={`group relative aspect-square overflow-hidden rounded-[18px] border-2 transition-all md:rounded-[20px] ${
                   selectedExistingId === c.id
                     ? 'border-violet-500 ring-2 ring-violet-200 shadow-lg'
                     : 'border-transparent hover:border-violet-200 hover:shadow-md'
@@ -157,11 +162,10 @@ export default function UploadPage() {
       {/* Errors */}
       {(uploadError || error) && <div className="rounded-[20px] bg-destructive/10 p-4 text-sm text-destructive">{uploadError || error}</div>}
 
-      {/* Fixed bottom action bar */}
-      <div className="fixed bottom-16 left-0 right-0 z-40 border-t border-white/70 bg-white/90 backdrop-blur-xl shadow-lg">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
+      <FadeIn delay={0.12}>
+        <div className="rounded-[24px] border border-white/70 bg-white/90 p-4 shadow-paper backdrop-blur-xl md:rounded-[28px] md:p-5">
           {isUploading && uploadProgress ? (
-            <div className="flex-1 space-y-1">
+            <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">上传中...</span>
                 <span className="font-medium text-violet-700">{uploadProgress.percentage}%</span>
@@ -171,7 +175,7 @@ export default function UploadPage() {
               </div>
             </div>
           ) : (
-            <Button onClick={handleUpload} disabled={!hasSelection || isUploading} className="flex-1 rounded-full" size="lg" variant="magic">
+            <Button onClick={handleUpload} disabled={!hasSelection || isUploading} className="w-full rounded-full" size="lg" variant="magic">
               {selectedExistingId ? (
                 <><ArrowRight className="h-4 w-4" /> 使用这张照片继续</>
               ) : selectedFile ? (
@@ -182,7 +186,7 @@ export default function UploadPage() {
             </Button>
           )}
         </div>
-      </div>
+      </FadeIn>
     </div>
   );
 }

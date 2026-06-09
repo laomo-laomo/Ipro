@@ -17,7 +17,13 @@ export function getAuthToken(): string | null {
     return null;
   }
 
-  return window.localStorage.getItem('auth_token');
+  const localToken = window.localStorage.getItem('auth_token');
+  if (localToken) {
+    return localToken;
+  }
+
+  const cookieMatch = document.cookie.match(/(?:^|; )auth_token=([^;]+)/);
+  return cookieMatch ? decodeURIComponent(cookieMatch[1]) : null;
 }
 
 export function authHeaders(headers: Record<string, string> = {}): Record<string, string> {

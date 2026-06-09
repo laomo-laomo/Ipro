@@ -19,6 +19,10 @@ import { mergeIllustrations } from '@/lib/utils/merge-illustrations';
 export interface GalleryStory extends Story {
   videoUrl?: string;
   videoStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+  videoDuration?: number | null;
+  videoResolution?: string | null;
+  videoFileSize?: number | null;
+  videoCreatedAt?: string | null;
   illustrationProgress?: number;
 }
 
@@ -60,12 +64,20 @@ async function hydrateGalleryStory(storyId: string): Promise<GalleryStory> {
 
   let videoUrl: string | undefined;
   let videoStatus: GalleryStory['videoStatus'] = 'pending';
+  let videoDuration: number | null | undefined;
+  let videoResolution: string | null | undefined;
+  let videoFileSize: number | null | undefined;
+  let videoCreatedAt: string | null | undefined;
 
   try {
     const videoInfo = await getStoryVideo(storyId);
     if (videoInfo) {
       videoUrl = videoInfo.url;
       videoStatus = videoInfo.status as GalleryStory['videoStatus'];
+      videoDuration = videoInfo.duration;
+      videoResolution = videoInfo.resolution;
+      videoFileSize = videoInfo.fileSize;
+      videoCreatedAt = videoInfo.createdAt;
     }
   } catch {
     // Video may not exist yet.
@@ -75,6 +87,10 @@ async function hydrateGalleryStory(storyId: string): Promise<GalleryStory> {
     ...result,
     videoUrl,
     videoStatus,
+    videoDuration,
+    videoResolution,
+    videoFileSize,
+    videoCreatedAt,
   };
 }
 
@@ -291,6 +307,10 @@ export function useGallery(): UseGalleryState & UseGalleryActions {
           ...prev,
           videoUrl: videoInfo.url,
           videoStatus: videoInfo.status as GalleryStory['videoStatus'],
+          videoDuration: videoInfo.duration,
+          videoResolution: videoInfo.resolution,
+          videoFileSize: videoInfo.fileSize,
+          videoCreatedAt: videoInfo.createdAt,
         } : null);
       }
     } catch (err) {

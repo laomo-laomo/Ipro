@@ -10,6 +10,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  isAdmin: boolean;
   loginWithPhone: (phone: string, code: string) => Promise<boolean>;
   loginWithWechat: (code: string) => Promise<boolean>;
   sendCode: (phone: string) => Promise<boolean>;

@@ -21,8 +21,27 @@ export interface MembershipStatus {
   totalQuota: number;
 }
 
+export interface RedeemResult {
+  rewardType: 'points' | 'membership';
+  membershipTier?: MembershipTier | null;
+  pointsAmount?: number | null;
+  userPoints: number;
+  membership: {
+    hasMembership: boolean;
+    totalQuota: number;
+    usedQuota: number;
+    remainingQuota: number;
+    expiresAt: string | null;
+    cardType: string | null;
+    isWarning: boolean;
+    warningMessage: string | null;
+  };
+}
+
 export interface OrderCreateResponse {
   orderId: string;
+  orderNo?: string;
+  amount?: number;
   paymentUrl?: string;
   checkoutUrl?: string;
   qrCode?: string;

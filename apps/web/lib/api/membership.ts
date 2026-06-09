@@ -2,6 +2,7 @@ import type {
   MembershipStatus,
   MembershipPlan,
   OrderCreateResponse,
+  RedeemResult,
   ApiResponse,
   MembershipTier,
 } from '@/types/membership';
@@ -16,7 +17,6 @@ export async function getMembershipStatus(): Promise<MembershipStatus> {
     const response = await fetch(`${API_BASE}/api/membership/status`, {
       method: 'GET',
       headers: jsonHeaders(),
-      credentials: 'include',
     });
 
     const result: ApiResponse<MembershipStatus> = await response.json();
@@ -51,7 +51,6 @@ export async function getMembershipPlans(): Promise<MembershipPlan[]> {
     const response = await fetch(`${API_BASE}/api/membership/plans`, {
       method: 'GET',
       headers: jsonHeaders(),
-      credentials: 'include',
     });
 
     const result: ApiResponse<MembershipPlan[]> = await response.json();
@@ -66,24 +65,22 @@ export async function getMembershipPlans(): Promise<MembershipPlan[]> {
 }
 
 /**
- * Create order for membership
- * Uses backend POST /api/orders/create with correct fields
+ * Create order for membership.
+ * Backend already exposes a membership-specific purchase route that returns the
+ * payment URL; calling the generic orders endpoint here caused the current UI
+ * to drift from the actual API contract.
  */
 export async function createMembershipOrder(
   planId: MembershipTier,
   channel: 'wechat' | 'alipay' | 'stripe'
 ): Promise<OrderCreateResponse> {
-  const response = await fetch(`${API_BASE}/api/orders/create`, {
+  const response = await fetch(`${API_BASE}/api/membership/purchase`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify({
-      type: 'membership',
+      cardType: planId,
       channel,
-      metadata: {
-        cardType: planId,
-      },
     }),
-    credentials: 'include',
   });
 
   const result: ApiResponse<{
@@ -100,6 +97,8 @@ export async function createMembershipOrder(
   // Transform backend response to frontend expected format
   return {
     orderId: result.data!.orderId,
+    orderNo: result.data!.orderNo,
+    amount: result.data!.amount,
     paymentUrl: result.data!.paymentUrl,
   };
 }
@@ -115,7 +114,6 @@ export async function getOrderStatus(orderId: string): Promise<{
   const response = await fetch(`${API_BASE}/api/orders/${orderId}`, {
     method: 'GET',
     headers: jsonHeaders(),
-    credentials: 'include',
   });
 
   const result: ApiResponse<{
@@ -139,4 +137,19 @@ export async function getOrderStatus(orderId: string): Promise<{
     status: result.data!.status,
     paidAt: result.data!.status === 'paid' ? result.data!.updatedAt : undefined,
   };
+}
+
+export async function redeemMembershipCode(code: string): Promise<RedeemResult> {
+  const response = await fetch(`${API_BASE}/api/membership/redeem`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ code }),
+  });
+
+  const result: ApiResponse<RedeemResult> = await response.json();
+  if (!result.success || !result.data) {
+    throw new Error(result.message || '兑换失败');
+  }
+
+  return result.data;
 }

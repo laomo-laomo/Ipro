@@ -51,10 +51,10 @@ export function StoryInput({ onGenerate, isGenerating = false, disabled = false,
   );
 
   return (
-    <div className={cn('rounded-[30px] border border-white/70 bg-white/82 p-6 shadow-paper backdrop-blur-xl', className)}>
+    <div className={cn('rounded-[24px] border border-white/70 bg-white/82 p-5 shadow-paper backdrop-blur-xl md:rounded-[30px] md:p-6', className)}>
       <div className="mb-5">
         <p className="text-sm font-medium text-amber-600">自定义故事</p>
-        <h3 className="mt-1 text-2xl font-bold">给这本故事起个名字</h3>
+        <h3 className="mt-1 text-xl font-bold md:text-2xl">给这本故事起个名字</h3>
         <p className="mt-2 text-sm leading-7 text-muted-foreground">例如“小明的太空冒险”或“月亮森林里的秘密派对”，AI 会围绕这个名字延展完整剧情。</p>
       </div>
 

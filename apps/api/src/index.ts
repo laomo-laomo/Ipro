@@ -115,8 +115,13 @@ async function main() {
     await protectedApp.register(assetsRoutes, { prefix: '/api/assets' });
   });
 
-  // Admin routes
-  await app.register(adminRoutes, { prefix: '/api/admin' });
+  // Admin routes - mounted inside the same protectedApp so the JWT authenticate
+  // preHandler runs before adminMiddleware; otherwise request.user is empty and
+  // every admin call returns 401.
+  await app.register(async (adminApp) => {
+    adminApp.addHook('preHandler', app.authenticate);
+    await adminApp.register(adminRoutes, { prefix: '/api/admin' });
+  });
 
 // Start
   try {

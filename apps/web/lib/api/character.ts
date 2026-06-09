@@ -17,7 +17,6 @@ export async function seedDevCharacter(): Promise<UploadCharacterResponse & { st
   const response = await fetch(`${API_BASE}/api/characters/dev-seed`, {
     method: 'POST',
     headers: jsonHeaders(),
-    credentials: 'include',
   });
 
   const result: ApiResponse<UploadCharacterResponse & { stylizedPhotoUrl?: string; featureDesc?: string }> = await response.json();
@@ -76,6 +75,7 @@ export async function uploadCharacter(
     });
 
     xhr.open('POST', `${API_BASE}/api/characters/upload`);
+    xhr.withCredentials = true;
     const tokenHeaders = authHeaders();
     if (tokenHeaders.Authorization) {
       xhr.setRequestHeader('Authorization', tokenHeaders.Authorization);
@@ -91,7 +91,6 @@ export async function getCharacter(characterId: string): Promise<Character> {
   const response = await fetch(`${API_BASE}/api/characters/${characterId}`, {
     method: 'GET',
     headers: jsonHeaders(),
-    credentials: 'include',
   });
 
   const result: ApiResponse<Character> = await response.json();
@@ -108,7 +107,6 @@ export async function getCharacters(): Promise<Character[]> {
   const response = await fetch(`${API_BASE}/api/characters`, {
     method: 'GET',
     headers: jsonHeaders(),
-    credentials: 'include',
   });
 
   const result: ApiResponse<Character[]> = await response.json();
@@ -129,7 +127,6 @@ export async function stylizeCharacter(
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(params),
-    credentials: 'include',
   });
 
   const result: ApiResponse<StylizeCharacterResponse> = await response.json();
@@ -168,7 +165,6 @@ export async function deleteCharacter(characterId: string): Promise<void> {
   const response = await fetch(`${API_BASE}/api/characters/${characterId}`, {
     method: 'DELETE',
     headers: jsonHeaders(),
-    credentials: 'include',
   });
 
   const result: ApiResponse<void> = await response.json();
@@ -191,7 +187,6 @@ export async function uploadCharacterFetch(
     method: 'POST',
     headers: authHeaders(),
     body: formData,
-    credentials: 'include',
   });
 
   const result: ApiResponse<UploadCharacterResponse> = await response.json();

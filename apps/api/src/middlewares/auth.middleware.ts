@@ -17,6 +17,7 @@ export interface JwtPayload {
 
 // Dev mode test user phone
 const DEV_PHONE = "13800138000";
+const DEV_AUTO_LOGIN_ENABLED = process.env.DEV_AUTO_LOGIN === 'true';
 
 export async function getOrCreateDevUser() {
   const user = await prisma.user.upsert({
@@ -80,7 +81,7 @@ export async function authMiddleware(
   }
 
   // Dev mode: auto-inject test user + give unlimited membership
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== 'production' && DEV_AUTO_LOGIN_ENABLED) {
     const devUser = await getOrCreateDevUser();
     await ensureDevMembership(devUser.id);
     console.log(`[auth] dev user injected: userId=${devUser.id}`);

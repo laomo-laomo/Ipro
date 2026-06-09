@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, Crown, Sparkles, Stars, Wand2 } from 'lucide-react';
+import { ArrowRight, BookOpen, Crown, FolderHeart, Images, Mic2, Sparkles, Stars, UserRound, Wand2 } from 'lucide-react';
 import { FloatingParticles, GlassCard, MagicButton } from '@/components/magic';
 import { FadeIn, StaggerItem, StaggerList } from '@/components/motion';
 
@@ -62,10 +62,101 @@ const MEMBERSHIP = [
   { name: '年卡', price: '¥499', detail: '平均每个故事更划算' },
 ];
 
+const MOBILE_ACTIONS = [
+  { href: '/create/upload', title: '开始创作', subtitle: '照片变主角', icon: Sparkles, tone: 'from-violet-600 to-fuchsia-500' },
+  { href: '/gallery', title: '我的作品', subtitle: '绘本与视频', icon: Images, tone: 'from-rose-500 to-orange-400' },
+  { href: '/assets', title: '素材库', subtitle: '复用资产', icon: FolderHeart, tone: 'from-emerald-500 to-teal-400' },
+  { href: '/voices', title: '声音', subtitle: '旁白与克隆', icon: Mic2, tone: 'from-sky-500 to-indigo-500' },
+  { href: '/membership', title: '会员', subtitle: '额度和权益', icon: UserRound, tone: 'from-amber-500 to-yellow-400' },
+];
+
 export default function HomePage() {
   return (
     <div className="relative overflow-hidden page-enter">
-      <section className="relative isolate border-b border-white/40">
+      <div className="md:hidden">
+        <section className="page-shell space-y-5">
+          <FadeIn>
+            <div className="overflow-hidden rounded-[28px] bg-gradient-to-br from-violet-600 via-fuchsia-500 to-amber-400 p-5 text-white shadow-magic">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="storybook-title text-3xl">IPro</p>
+                  <h1 className="mt-3 text-3xl font-extrabold leading-tight">今天要把谁写进童话里？</h1>
+                  <p className="mt-3 text-sm leading-6 text-white/80">上传照片，选择故事，生成绘本、有声书和视频。</p>
+                </div>
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] bg-white/20">
+                  <BookOpen className="h-7 w-7" />
+                </div>
+              </div>
+              <Link href="/create/upload" className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-white text-sm font-bold text-violet-700 shadow-sm">
+                <Sparkles className="h-4 w-4" />
+                开始新的童话
+              </Link>
+            </div>
+          </FadeIn>
+
+          <StaggerList className="grid grid-cols-2 gap-3">
+            {MOBILE_ACTIONS.map((item, index) => {
+              const Icon = item.icon;
+              return (
+                <StaggerItem key={item.href} className={index === 0 ? 'col-span-2' : undefined}>
+                  <Link href={item.href} className="flex min-h-[92px] items-center gap-3 rounded-[24px] border border-white/70 bg-white/85 p-4 shadow-paper">
+                    <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] bg-gradient-to-br ${item.tone} text-white shadow-sm`}>
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-base font-bold">{item.title}</span>
+                      <span className="mt-1 block text-xs text-muted-foreground">{item.subtitle}</span>
+                    </span>
+                  </Link>
+                </StaggerItem>
+              );
+            })}
+          </StaggerList>
+
+          <FadeIn delay={0.06}>
+            <div className="space-y-3">
+              <div className="flex items-end justify-between">
+                <div>
+                  <p className="text-sm font-medium text-amber-600">经典模板</p>
+                  <h2 className="text-2xl font-bold">先挑一个故事</h2>
+                </div>
+                <Link href="/create/story" className="text-sm font-semibold text-violet-700">
+                  全部
+                </Link>
+              </div>
+              <div className="flex gap-3 overflow-x-auto pb-1">
+                {TEMPLATE_PREVIEWS.map((template) => (
+                  <Link key={template.title} href="/create/upload" className="w-[142px] shrink-0 overflow-hidden rounded-[22px] border border-white/70 bg-white/85 p-2 shadow-paper">
+                    <div className={`aspect-[3/4] rounded-[18px] bg-gradient-to-br ${template.gradient} p-3`}>
+                      <div className="flex h-full flex-col justify-between rounded-[14px] border border-white/45 bg-white/20 p-3">
+                        <span className="w-fit rounded-full bg-white/70 px-2 py-1 text-[10px] font-semibold text-violet-700">模板</span>
+                        <div className="rounded-[14px] bg-black/10 p-2">
+                          <p className="truncate text-sm font-bold text-magic-ink">{template.title}</p>
+                          <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-magic-ink/70">{template.subtitle}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </FadeIn>
+
+          <FadeIn delay={0.08}>
+            <div className="grid grid-cols-3 gap-2 rounded-[24px] border border-white/70 bg-white/80 p-3 shadow-paper">
+              {FLOW_STEPS.map((step, index) => (
+                <div key={step.title} className="rounded-[18px] bg-gradient-to-b from-violet-50 to-amber-50 p-3 text-center">
+                  <p className="text-2xl">{step.icon}</p>
+                  <p className="mt-2 text-xs font-bold">{step.title}</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">0{index + 1}</p>
+                </div>
+              ))}
+            </div>
+          </FadeIn>
+        </section>
+      </div>
+
+      <section className="relative isolate hidden border-b border-white/40 md:block">
         <FloatingParticles count={8} />
         <div className="page-shell pt-10 sm:pt-14">
           <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
@@ -115,7 +206,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="page-shell pt-8">
+      <section className="hidden page-shell pt-8 md:block">
         <StaggerList className="grid gap-4 md:grid-cols-3">
           {FLOW_STEPS.map((step, index) => (
             <StaggerItem key={step.title}>
@@ -132,7 +223,7 @@ export default function HomePage() {
         </StaggerList>
       </section>
 
-      <section className="page-shell pt-0">
+      <section className="hidden page-shell pt-0 md:block">
         <FadeIn delay={0.06}>
           <div className="mb-5 flex items-end justify-between gap-4">
             <div>
@@ -177,7 +268,7 @@ export default function HomePage() {
         </StaggerList>
       </section>
 
-      <section className="page-shell pt-0">
+      <section className="hidden page-shell pt-0 md:block">
         <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
           <FadeIn delay={0.08}>
             <GlassCard className="p-6 sm:p-8">
@@ -232,7 +323,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="page-shell pt-0">
+      <section className="hidden page-shell pt-0 md:block">
         <FadeIn delay={0.12}>
           <GlassCard className="relative overflow-hidden bg-gradient-to-r from-violet-600 via-fuchsia-500 to-amber-400 p-8 text-white sm:p-10">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.28),transparent_30%)]" />

@@ -71,6 +71,7 @@ interface ApiStory extends Omit<Partial<Story>, 'segments' | 'status'> {
   scenes?: ApiStoryScene[];
   segments?: Story['segments'];
   illustrations?: ApiIllustration[];
+  errorMessage?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -212,6 +213,7 @@ function normalizeStory(story: ApiStory): Story {
     storyboard,
     segments: scenes,
     ...(videoUrl ? { videoUrl } : {}),
+    errorMessage: story.errorMessage || null,
     createdAt: story.createdAt,
     updatedAt: story.updatedAt,
   } as Story;
@@ -233,7 +235,6 @@ export async function generateStory(
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(params),
-    credentials: 'include',
   });
 
   const result: ApiResponse<GenerateStoryResponse> = await response.json();
@@ -247,7 +248,6 @@ export async function getStory(storyId: string): Promise<Story> {
   const response = await fetch(`${API_BASE}/api/stories/${storyId}`, {
     method: 'GET',
     headers: jsonHeaders(),
-    credentials: 'include',
   });
 
   const result: ApiResponse<ApiStory> = await response.json();
@@ -261,7 +261,6 @@ export async function getStoryProgress(storyId: string): Promise<StoryProgress> 
   const response = await fetch(`${API_BASE}/api/stories/${storyId}/progress`, {
     method: 'GET',
     headers: jsonHeaders(),
-    credentials: 'include',
   });
 
   const result: ApiResponse<StoryProgress> = await response.json();
@@ -282,7 +281,6 @@ export async function updateStorySegments(
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify({ segments }),
-    credentials: 'include',
   });
 
   const result: ApiResponse<ApiStory> = await response.json();
@@ -301,7 +299,6 @@ export async function updateSegment(
     method: 'PATCH',
     headers: jsonHeaders(),
     body: JSON.stringify(updates),
-    credentials: 'include',
   });
 
   const result: ApiResponse<ApiStory> = await response.json();
@@ -315,7 +312,6 @@ export async function getStories(): Promise<Story[]> {
   const response = await fetch(`${API_BASE}/api/stories`, {
     method: 'GET',
     headers: jsonHeaders(),
-    credentials: 'include',
   });
 
   const result: ApiResponse<ApiStory[]> = await response.json();
@@ -329,7 +325,6 @@ export async function deleteStory(storyId: string): Promise<void> {
   const response = await fetch(`${API_BASE}/api/stories/${storyId}`, {
     method: 'DELETE',
     headers: jsonHeaders(),
-    credentials: 'include',
   });
 
   const result: ApiResponse<void> = await response.json();
@@ -357,7 +352,6 @@ export async function startIllustration(
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify({ characterId: character.id, force: options?.force ?? false }),
-    credentials: 'include',
   });
 
   const result: ApiResponse<{ jobId: string }> = await response.json();
@@ -374,7 +368,6 @@ export async function getStoryIllustrations(
   const response = await fetch(`${API_BASE}/api/stories/${storyId}/illustrations`, {
     method: 'GET',
     headers: jsonHeaders(),
-    credentials: 'include',
   });
 
   const result: ApiResponse<ApiIllustration[]> = await response.json();
@@ -403,7 +396,6 @@ export async function startVideo(
   const response = await fetch(`${API_BASE}/api/stories/${storyId}/video`, {
     method: 'POST',
     headers: jsonHeaders(),
-    credentials: 'include',
     body: JSON.stringify(body || {}),
   });
 
@@ -438,7 +430,6 @@ export async function getAudiobook(storyId: string): Promise<Audiobook | null> {
   const response = await fetch(`${API_BASE}/api/stories/${storyId}/audiobook`, {
     method: 'GET',
     headers: jsonHeaders(),
-    credentials: 'include',
   });
 
   if (response.status === 404) {
@@ -467,7 +458,6 @@ export async function generateAudiobook(
   const response = await fetch(`${API_BASE}/api/stories/${storyId}/audiobook`, {
     method: 'POST',
     headers: jsonHeaders(),
-    credentials: 'include',
     body: JSON.stringify(options),
   });
 
@@ -485,7 +475,6 @@ export async function retryFailedIllustrations(
   const response = await fetch(`${API_BASE}/api/stories/${storyId}/illustrations/retry-failed`, {
     method: 'POST',
     headers: jsonHeaders(),
-    credentials: 'include',
     body: '{}',
   });
 
@@ -503,7 +492,6 @@ export async function retrySingleIllustration(
   const response = await fetch(`${API_BASE}/api/stories/${storyId}/illustrations/${sceneIndex}/retry`, {
     method: 'POST',
     headers: jsonHeaders(),
-    credentials: 'include',
     body: '{}',
   });
 
@@ -535,7 +523,6 @@ export async function regenerateAllIllustrations(
   const response = await fetch(`${API_BASE}/api/stories/${storyId}/regenerate-illustrations`, {
     method: 'POST',
     headers: jsonHeaders(),
-    credentials: 'include',
     body: '{}',
   });
 
@@ -547,32 +534,50 @@ export async function regenerateAllIllustrations(
 }
 
 export async function getStoryVideo(storyId: string): Promise<{
-  url: string;
-  status: string;
+  url?: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  audioUrl?: string | null;
+  audioType?: string | null;
+  duration?: number | null;
+  resolution?: string | null;
+  fileSize?: number | null;
+  createdAt?: string | null;
 } | null> {
   const response = await fetch(`${API_BASE}/api/stories/${storyId}/video`, {
     method: 'GET',
     headers: jsonHeaders(),
-    credentials: 'include',
   });
 
   if (response.status === 404) {
     return null;
   }
 
-  const result: ApiResponse<{ videoUrl?: string; url?: string; status: string }> = await response.json();
+  const result: ApiResponse<{
+    videoUrl?: string | null;
+    url?: string | null;
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    audioUrl?: string | null;
+    audioType?: string | null;
+    duration?: number | null;
+    resolution?: string | null;
+    fileSize?: number | null;
+    createdAt?: string | null;
+  }> = await response.json();
   if (!result.success || !result.data) {
     return null;
   }
 
   const url = resolveAssetUrl(result.data.videoUrl || result.data.url);
-  if (!url) {
-    return null;
-  }
 
   return {
     url,
     status: result.data.status,
+    audioUrl: resolveAssetUrl(result.data.audioUrl) || result.data.audioUrl,
+    audioType: result.data.audioType,
+    duration: result.data.duration,
+    resolution: result.data.resolution,
+    fileSize: result.data.fileSize,
+    createdAt: result.data.createdAt,
   };
 }
 

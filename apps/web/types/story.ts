@@ -54,6 +54,13 @@ export interface Story {
   status: StoryStatus;
   storyboard: Storyboard;
   segments: StorySegment[];
+  videoUrl?: string;
+  videoStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+  videoDuration?: number | null;
+  videoResolution?: string | null;
+  videoFileSize?: number | null;
+  videoCreatedAt?: string | null;
+  errorMessage?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -77,6 +84,7 @@ export interface StoryProgress {
   currentStep: string;
   progress: number;
   message?: string;
+  errorMessage?: string | null;
 }
 
 // Template types

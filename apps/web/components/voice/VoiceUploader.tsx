@@ -118,7 +118,7 @@ export function VoiceUploader({ onFileSelect, previewUrl, onClear, isUploading =
 
   if (audioUrl) {
     return (
-      <div className={cn('rounded-[28px] border border-white/70 bg-white/82 p-5 shadow-paper', className)}>
+      <div className={cn('rounded-[24px] border border-white/70 bg-white/82 p-4 shadow-paper md:rounded-[28px] md:p-5', className)}>
         <div className="flex items-center gap-4">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-amber-50 text-violet-700">
             <Music className="h-7 w-7" />
@@ -152,21 +152,21 @@ export function VoiceUploader({ onFileSelect, previewUrl, onClear, isUploading =
     <div
       {...getRootProps()}
       className={cn(
-        'relative cursor-pointer overflow-hidden rounded-[30px] border-2 border-dashed p-8 transition-all duration-200',
-        isDragActive ? 'border-violet-500 bg-gradient-to-br from-violet-50 to-amber-50 shadow-magic' : 'border-violet-200 bg-white/78 hover:border-violet-400 hover:shadow-paper',
+        'relative cursor-pointer overflow-hidden rounded-[24px] border-2 border-dashed p-5 transition-all duration-200 md:rounded-[30px] md:p-8',
+        isDragActive ? 'border-violet-500 bg-gradient-to-br from-violet-50 to-amber-50 shadow-magic' : 'border-violet-200 bg-white/80 hover:border-violet-400 hover:shadow-paper',
         (disabled || isUploading) && 'opacity-50 cursor-not-allowed',
         className
       )}
     >
       <input {...getInputProps()} />
 
-      <div className="flex min-h-[260px] flex-col items-center justify-center gap-4 text-center">
-        <div className={cn('flex h-20 w-20 items-center justify-center rounded-[26px]', isDragActive ? 'bg-violet-100 text-violet-700' : 'bg-gradient-to-br from-violet-100 to-amber-50 text-violet-600')}>
-          {isDragActive ? <Music className="h-9 w-9" /> : <Upload className="h-9 w-9" />}
+      <div className="flex min-h-[220px] flex-col items-center justify-center gap-4 text-center md:min-h-[260px]">
+        <div className={cn('flex h-16 w-16 items-center justify-center rounded-[22px] md:h-20 md:w-20 md:rounded-[26px]', isDragActive ? 'bg-violet-100 text-violet-700' : 'bg-gradient-to-br from-violet-100 to-amber-50 text-violet-600')}>
+          {isDragActive ? <Music className="h-8 w-8 md:h-9 md:w-9" /> : <Upload className="h-8 w-8 md:h-9 md:w-9" />}
         </div>
 
         <div className="space-y-2">
-          <p className="text-xl font-bold">{isDragActive ? '松开以上传音频样本' : '拖拽或点击上传音频'}</p>
+          <p className="text-lg font-bold md:text-xl">{isDragActive ? '松开以上传音频样本' : '拖拽或点击上传音频'}</p>
           <p className="max-w-md text-sm leading-7 text-muted-foreground">建议上传 30 秒以上、环境安静、发音清晰的录音，后续克隆效果会更稳定自然。</p>
         </div>
 

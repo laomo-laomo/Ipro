@@ -74,32 +74,32 @@ export default function GalleryPage() {
 
   if (activeTab === 'characters') {
     return (
-      <div className="page-shell page-enter space-y-6">
+      <div className="page-shell page-enter space-y-5 md:space-y-6">
         <FadeIn>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
             <Button variant="ghost" size="sm" onClick={() => setActiveTab('home')} className="rounded-full">
               <ArrowLeft className="h-4 w-4" />
               返回
             </Button>
             <div>
               <p className="text-sm font-medium text-rose-600">我的角色</p>
-              <h1 className="text-3xl font-bold">已生成的角色形象</h1>
+              <h1 className="text-2xl font-bold md:text-3xl">已生成的角色形象</h1>
             </div>
           </div>
         </FadeIn>
         {styledCharacters.length === 0 ? (
           <FadeIn>
-            <GlassCard className="p-12 text-center">
+            <GlassCard className="p-8 text-center md:p-12">
               <User className="mx-auto h-12 w-12 text-muted-foreground" />
               <p className="mt-4 text-muted-foreground">还没有生成过角色形象</p>
               <MagicButton onClick={handleCreateNew} className="mt-4">开始创作</MagicButton>
             </GlassCard>
           </FadeIn>
         ) : (
-          <StaggerList className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          <StaggerList className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 md:gap-4 lg:grid-cols-5">
             {styledCharacters.map((character) => (
               <StaggerItem key={character.id}>
-                <div className="group relative overflow-hidden rounded-[24px] border border-white/70 bg-white/80 shadow-paper transition-all hover:-translate-y-1 hover:shadow-lg">
+                <div className="group relative overflow-hidden rounded-[20px] border border-white/70 bg-white/82 shadow-paper transition-all hover:-translate-y-1 hover:shadow-lg md:rounded-[24px]">
                   <div className="aspect-square overflow-hidden">
                     <img src={character.stylizedPhotoUrl!} alt="角色定稿" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
                   </div>
@@ -123,23 +123,23 @@ export default function GalleryPage() {
 
   if (activeTab === 'books') {
     return (
-      <div className="page-shell page-enter space-y-6">
+      <div className="page-shell page-enter space-y-5 md:space-y-6">
         <FadeIn>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
             <Button variant="ghost" size="sm" onClick={() => setActiveTab('home')} className="rounded-full">
               <ArrowLeft className="h-4 w-4" />
               返回
             </Button>
             <div>
               <p className="text-sm font-medium text-violet-700">我的绘本</p>
-              <h1 className="text-3xl font-bold">已创作的故事绘本</h1>
+              <h1 className="text-2xl font-bold md:text-3xl">已创作的故事绘本</h1>
               <p className="mt-2 text-sm text-muted-foreground">这里只展示已经有内容可翻阅的绘本，避免半成品点开后报错。</p>
             </div>
           </div>
         </FadeIn>
         {readableStories.length === 0 ? (
           <FadeIn>
-            <GlassCard className="p-12 text-center">
+            <GlassCard className="p-8 text-center md:p-12">
               <BookImage className="mx-auto h-12 w-12 text-muted-foreground" />
               <p className="mt-4 text-muted-foreground">还没有可翻阅的绘本</p>
               <MagicButton onClick={handleCreateNew} className="mt-4">开始创作</MagicButton>
@@ -147,7 +147,7 @@ export default function GalleryPage() {
           </FadeIn>
         ) : (
           <>
-            <StaggerList className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <StaggerList className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3 xl:grid-cols-4">
               {readableStories.map((story) => (
                 <StaggerItem key={story.id}>
                   <IllustrationCard story={story} onDelete={handleDelete} />
@@ -181,22 +181,22 @@ export default function GalleryPage() {
 
   if (activeTab === 'videos') {
     return (
-      <div className="page-shell page-enter space-y-6">
+      <div className="page-shell page-enter space-y-5 md:space-y-6">
         <FadeIn>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
             <Button variant="ghost" size="sm" onClick={() => setActiveTab('home')} className="rounded-full">
               <ArrowLeft className="h-4 w-4" />
               返回
             </Button>
             <div>
               <p className="text-sm font-medium text-amber-600">我的视频</p>
-              <h1 className="text-3xl font-bold">已生成的故事视频</h1>
+              <h1 className="text-2xl font-bold md:text-3xl">已生成的故事视频</h1>
             </div>
           </div>
         </FadeIn>
         {storiesWithVideo.length === 0 ? (
           <FadeIn>
-            <GlassCard className="p-12 text-center">
+            <GlassCard className="p-8 text-center md:p-12">
               <Video className="mx-auto h-12 w-12 text-muted-foreground" />
               <p className="mt-4 text-muted-foreground">还没有生成过视频</p>
               <MagicButton onClick={handleCreateNew} className="mt-4">开始创作</MagicButton>
@@ -204,7 +204,7 @@ export default function GalleryPage() {
           </FadeIn>
         ) : (
           <>
-            <StaggerList className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <StaggerList className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3 xl:grid-cols-4">
               {storiesWithVideo.map((story) => (
                 <StaggerItem key={story.id}>
                   <IllustrationCard story={story} onDelete={handleDelete} />
@@ -237,12 +237,12 @@ export default function GalleryPage() {
   }
 
   return (
-    <div className="page-shell page-enter space-y-8">
+    <div className="page-shell page-enter space-y-5 md:space-y-8">
       <FadeIn>
-        <section className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+        <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between md:gap-5">
           <div>
             <p className="text-sm font-medium text-violet-700">我的作品</p>
-            <h1 className="mt-2 text-4xl font-bold">每一本都来自你们家的主角光环</h1>
+            <h1 className="mt-2 text-3xl font-bold leading-tight md:text-4xl">每一本都来自你们家的主角光环</h1>
           </div>
           <MagicButton onClick={handleCreateNew} size="lg" className="px-7">
             创建新故事
@@ -252,7 +252,7 @@ export default function GalleryPage() {
 
       {isLoading && stories.length === 0 && characters.length === 0 && <StoryGridSkeleton />}
 
-      <StaggerList className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+      <StaggerList className="grid grid-cols-1 gap-3 sm:grid-cols-3 md:gap-5">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           // Home-tab counts always reflect the full set, not "however many have been paged through".
@@ -266,7 +266,7 @@ export default function GalleryPage() {
             <StaggerItem key={tab.key}>
               <button
                 onClick={() => setActiveTab(tab.key)}
-                className="group w-full overflow-hidden rounded-[28px] border border-white/70 bg-white/80 p-6 text-left shadow-paper transition-all hover:-translate-y-1 hover:shadow-lg"
+                className="group w-full overflow-hidden rounded-[24px] border border-white/70 bg-white/82 p-5 text-left shadow-paper transition-all hover:-translate-y-1 hover:shadow-lg md:rounded-[28px] md:p-6"
               >
                 <div className="flex h-14 w-14 items-center justify-center rounded-[18px] bg-gradient-to-br from-violet-100 to-amber-50 text-violet-700 transition-transform duration-300 group-hover:scale-110">
                   <Icon className="h-7 w-7" />

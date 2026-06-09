@@ -15,6 +15,7 @@ export interface WechatLoginResult {
     id: string;
     nickname: string | null;
     avatar: string | null;
+    role: 'user' | 'admin';
     hasMembership: boolean;
   };
 }
@@ -28,6 +29,7 @@ export interface PhoneLoginResult {
     id: string;
     nickname: string | null;
     avatar: string | null;
+    role: 'user' | 'admin';
     hasMembership: boolean;
   };
 }
@@ -38,14 +40,19 @@ export interface PhoneLoginResult {
 const WECHAT_API = {
   appId: process.env.WECHAT_APP_ID || '',
   appSecret: process.env.WECHAT_APP_SECRET || '',
-  authUrl: 'https://api.weixin.qq.com/sns/jscode2session',
+  accessTokenUrl: 'https://api.weixin.qq.com/sns/oauth2/access_token',
+  userInfoUrl: 'https://api.weixin.qq.com/sns/userinfo',
 };
 
 /**
- * 获取微信 OpenID
+ * 获取微信网页授权用户信息
  */
-async function getWechatOpenId(code: string): Promise<string> {
-  const url = `${WECHAT_API.authUrl}?appid=${WECHAT_API.appId}&secret=${WECHAT_API.appSecret}&js_code=${code}&grant_type=authorization_code`;
+async function getWechatOAuthProfile(code: string): Promise<{ openid: string; nickname?: string; avatar?: string }> {
+  if (!WECHAT_API.appId || !WECHAT_API.appSecret) {
+    throw new Error('微信登录未配置 AppID 或 AppSecret');
+  }
+
+  const url = `${WECHAT_API.accessTokenUrl}?appid=${WECHAT_API.appId}&secret=${WECHAT_API.appSecret}&code=${code}&grant_type=authorization_code`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -56,7 +63,9 @@ async function getWechatOpenId(code: string): Promise<string> {
     errcode?: number;
     errmsg?: string;
     openid?: string;
-    session_key?: string;
+    access_token?: string;
+    refresh_token?: string;
+    scope?: string;
     unionid?: string;
   };
 
@@ -68,7 +77,33 @@ async function getWechatOpenId(code: string): Promise<string> {
     throw new Error('无法获取 OpenID');
   }
 
-  return data.openid;
+  if (data.access_token) {
+    try {
+      const userInfoUrl = `${WECHAT_API.userInfoUrl}?access_token=${data.access_token}&openid=${data.openid}&lang=zh_CN`;
+      const userInfoResponse = await fetch(userInfoUrl, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const userInfo = await userInfoResponse.json() as {
+        errcode?: number;
+        errmsg?: string;
+        nickname?: string;
+        headimgurl?: string;
+      };
+
+      if (!userInfo.errcode) {
+        return {
+          openid: data.openid,
+          nickname: userInfo.nickname,
+          avatar: userInfo.headimgurl,
+        };
+      }
+    } catch {
+      // If userinfo fetch fails, we still fall back to openid-only login.
+    }
+  }
+
+  return { openid: data.openid };
 }
 
 /**
@@ -99,19 +134,36 @@ export async function wechatLogin(
   signToken: (payload: JwtPayload) => string,
   code: string
 ): Promise<WechatLoginResult> {
-  // 调用微信 API 获取 OpenID
-  const openid = await getWechatOpenId(code);
+  const isDev = process.env.NODE_ENV !== 'production';
+  const isMockCode = code.startsWith('mock_wechat_code_') || code.startsWith('mock_scan_code_');
+
+  const profile = isDev && isMockCode
+    ? {
+        openid: `dev_${code}`,
+        nickname: '微信联调用户',
+        avatar: null,
+      }
+    : await getWechatOAuthProfile(code);
 
   // 查找或创建用户
   let user = await prisma.user.findUnique({
-    where: { openid },
+    where: { openid: profile.openid },
   });
 
   if (!user) {
     user = await prisma.user.create({
       data: {
-        openid,
-        nickname: `微信用户${Date.now() % 10000}`,
+        openid: profile.openid,
+        nickname: profile.nickname || `微信用户${Date.now() % 10000}`,
+        avatar: profile.avatar || null,
+      },
+    });
+  } else if (profile.nickname || profile.avatar) {
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        nickname: profile.nickname || user.nickname,
+        avatar: profile.avatar || user.avatar,
       },
     });
   }
@@ -126,7 +178,7 @@ export async function wechatLogin(
   });
 
   // 生成 JWT Token
-  const token = signToken({ id: user.id });
+  const token = signToken({ id: user.id, role: user.role });
 
   return {
     token,
@@ -134,6 +186,7 @@ export async function wechatLogin(
       id: user.id,
       nickname: user.nickname,
       avatar: user.avatar,
+      role: user.role as 'user' | 'admin',
       hasMembership: !!membership,
     },
   };
@@ -199,13 +252,14 @@ export async function phoneLogin(
         },
       });
     }
-    const token = signToken({ id: user.id });
+    const token = signToken({ id: user.id, role: user.role });
     return {
       token,
       user: {
         id: user.id,
         nickname: user.nickname,
         avatar: user.avatar,
+        role: user.role as 'user' | 'admin',
         hasMembership: false,
       },
     };
@@ -261,7 +315,7 @@ export async function phoneLogin(
   });
 
   // 生成 JWT Token
-  const token = signToken({ id: user.id });
+  const token = signToken({ id: user.id, role: user.role });
 
   return {
     token,
@@ -269,6 +323,7 @@ export async function phoneLogin(
       id: user.id,
       nickname: user.nickname,
       avatar: user.avatar,
+      role: user.role as 'user' | 'admin',
       hasMembership: !!membership,
     },
   };

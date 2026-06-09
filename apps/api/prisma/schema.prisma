@@ -14,6 +14,7 @@ model User {
   nickname    String?
   avatar      String?
   role        String   @default("user")  // user, admin
+  points      Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -23,6 +24,7 @@ voices      UserVoice[]
   memberships Membership[]
   orders      Order[]
   notifications PaymentNotification[]
+  redeemCodes RedeemCode[] @relation("RedeemCodeUsedBy")
 }
 
 model UserVoice {
@@ -78,6 +80,7 @@ model Story {
   characterStylizedUrl String?
   source      String   @default("template") // template, custom
   status      String   @default("draft") // draft, processing, illustrated, completed
+  errorMessage String?
   totalCost   Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -249,4 +252,24 @@ model PaymentLog {
   @@index([orderNo])
   @@index([channel])
   @@index([createdAt])
+}
+
+model RedeemCode {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  rewardType    String   // points, membership
+  pointsAmount  Int?
+  membershipTier String?
+  expiresAt     DateTime?
+  usedByUserId  String?
+  usedByUser    User?    @relation("RedeemCodeUsedBy", fields: [usedByUserId], references: [id], onDelete: SetNull)
+  usedAt        DateTime?
+  status        String   @default("active") // active, used, expired, disabled
+  note          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status])
+  @@index([rewardType])
+  @@index([usedByUserId])
 }

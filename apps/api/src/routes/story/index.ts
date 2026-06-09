@@ -342,7 +342,7 @@ async function generateStoryInBackground(
     fastify.log.error({ error: errorMessage, stack: errorStack, storyId, title }, '[Story] Background generation failed');
     await fastify.prisma.story.update({
       where: { id: storyId },
-      data: { status: 'failed' },
+      data: { status: 'failed', errorMessage },
     }).catch(() => {});
   }
 }
@@ -693,7 +693,17 @@ fastify.get('/:id', async (request: FastifyRequest<{ Params: StoryParams }>, rep
     }
     return {
       success: true,
-      data: { storyId: story.id, status, currentStep, progress, completedIllustrations, failedIllustrations, totalIllustrations },
+      data: {
+        storyId: story.id,
+        status,
+        currentStep,
+        progress,
+        completedIllustrations,
+        failedIllustrations,
+        totalIllustrations,
+        errorMessage: story.errorMessage,
+        message: story.errorMessage || undefined,
+      },
     };
   });
 

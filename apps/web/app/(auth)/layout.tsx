@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { AuthProvider } from '@/providers/AuthProvider';
 
 export const metadata: Metadata = {
   title: '认证 - Ipro',
@@ -11,8 +12,8 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen">
-      {children}
-    </div>
+    <AuthProvider>
+      <div className="min-h-screen">{children}</div>
+    </AuthProvider>
   );
 }

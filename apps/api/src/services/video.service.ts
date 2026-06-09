@@ -142,6 +142,46 @@ export async function createVideoRecord(
   const scenes = toVideoScenes(story);
   const charCount = scenes.reduce((sum, s) => sum + getSceneAudioText(s).length, 0);
 
+  const requestedAudioType = options.audioType || 'tts';
+  const requestedVoiceId = options.voiceId || null;
+
+  const existingCompleted = await prisma.video.findFirst({
+    where: {
+      storyId,
+      status: 'completed',
+      videoUrl: { not: null },
+      audioType: requestedAudioType,
+      voiceId: requestedVoiceId,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (existingCompleted) {
+    // Reuse the latest completed video. The route will short-circuit when it sees
+    // `status: completed`, preventing accidental duplicate renders on repeat clicks.
+    return {
+      videoId: existingCompleted.id,
+      status: existingCompleted.status,
+      charCount: existingCompleted.charCount,
+    };
+  }
+
+  const existingActive = await prisma.video.findFirst({
+    where: {
+      storyId,
+      status: { in: ['pending', 'processing'] },
+      audioType: requestedAudioType,
+      voiceId: requestedVoiceId,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (existingActive) {
+    return {
+      videoId: existingActive.id,
+      status: existingActive.status,
+      charCount: existingActive.charCount || charCount,
+    };
+  }
+
   // Calculate cost
   const audioCost = options.audioType === 'cloned' ? charCount * 0.0002 : 0;
   const videoCost = 0.1; // Base video rendering cost
@@ -704,7 +744,6 @@ export async function markVideoCompleted(
     data: {
       status: 'completed',
       videoUrl,
-      audioUrl: metadata?.audioUrl,
       duration: metadata?.duration,
       resolution: metadata?.resolution,
       fileSize: metadata?.fileSize,

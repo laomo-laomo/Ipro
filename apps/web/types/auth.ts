@@ -5,6 +5,7 @@ export interface User {
   nickname: string | null;
   avatar: string | null;
   phone?: string | null;
+  role?: 'user' | 'admin';
   hasMembership: boolean;
 }
 

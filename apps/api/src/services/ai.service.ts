@@ -173,7 +173,11 @@ export async function waitForTask(taskId: string, maxAttempts: number = 300): Pr
   for (let i = 0; i < maxAttempts; i++) {
     const result = await queryTaskStatus(taskId);
     if (result.status === 'completed') {
-      return result.images || [];
+      const images = result.images || [];
+      if (images.length === 0) {
+        throw new Error('Image provider completed without returning an image URL');
+      }
+      return images;
     }
     if (result.status === 'failed') {
       throw new Error(result.error || 'Image generation failed');
@@ -535,10 +539,10 @@ export async function stylizeCharacter(
   title?: string
 ): Promise<string> {
   const stylePrompts = {
-    pixar: 'A cute character in Pixar 3D animation style, smooth rounded shapes, vibrant colors, expressive big eyes, clean portrait on pure white background, vertical composition',
-    ghibli: 'A charming character in Studio Ghibli anime style portrait, hand-drawn cel animation look, warm colors, whimsical charm, on clean white background, vertical portrait orientation',
-    clay: 'A cute claymation stop-motion style character, Play-Doh texture, cute chunky proportions, tactile handmade look, on pure white background, vertical portrait',
-    handdrawn: 'A delicate hand-drawn illustration character, soft pencil and watercolor textures, warm gentle tones, artistic sketch style, on clean white background, vertical portrait orientation',
+    pixar: 'Create a premium feature-animation hero portrait in a strongly recognizable Pixar-inspired 3D style: large expressive eyes, rounded appeal, polished subsurface skin shading, sculpted 3D face volumes, glossy believable materials, cinematic warm rim light, saturated but tasteful family-film color design, high-end animated-movie character turnaround energy, clean studio backdrop, vertical composition. The result must read immediately as a modern theatrical 3D animated character, not flat illustration or generic cartoon.',
+    ghibli: 'Create a strongly recognizable Studio Ghibli-inspired hand-painted anime portrait: soft cel-animation linework, poetic natural color harmony, gentle painterly shading, airy whimsical atmosphere, calm storytelling expression, delicate facial features, light watercolor-and-gouache background handling, emotionally warm Japanese animated-film feeling, clean studio backdrop, vertical composition. The result must read immediately as classic hand-crafted anime cinema, not 3D render or generic cartoon.',
+    clay: 'Create a strongly recognizable stop-motion clay animation portrait: obvious handmade clay texture, finger-molded surfaces, tactile plasticine materials, tiny imperfections, chunky cute silhouette, miniature set lighting, handcrafted studio stop-motion charm, soft but directional cinematic light, clean studio backdrop, vertical composition. The result must read immediately as real claymation, not smooth 3D or flat drawing.',
+    handdrawn: 'Create a strongly recognizable premium hand-drawn children\'s book portrait: visible pencil linework, watercolor washes, ink-and-colored-pencil texture, paper grain, soft layered pigments, elegant illustration composition, warm editorial storybook atmosphere, handcrafted brush detail, clean studio backdrop, vertical composition. The result must read immediately as traditional illustration on paper, not 3D render or anime cel style.',
   };
 
   // Look up story costume profile for this title
@@ -555,10 +559,10 @@ export async function stylizeCharacter(
       const costumeDesc = await analyzeStoryCostumeProfile(title);
       if (costumeDesc) {
         const styleDesc = {
-          pixar: ' in Pixar 3D animation style, smooth rounded shapes, vibrant colors, expressive big eyes, clean portrait on pure white background, vertical composition',
-          ghibli: ' in Studio Ghibli anime style, hand-drawn cel animation look, warm colors, whimsical charm, on clean white background, vertical portrait orientation',
-          clay: ' in claymation stop-motion style, Play-Doh texture, cute chunky proportions, tactile handmade look, on pure white background, vertical portrait',
-          handdrawn: ' in hand-drawn illustration style, soft pencil and watercolor textures, warm gentle tones, artistic sketch style, on clean white background, vertical portrait orientation',
+          pixar: ' rendered in a strongly recognizable Pixar-inspired feature-animation 3D look with polished volumetric shading, expressive eyes, rounded forms, cinematic lighting, and premium animated-film materials',
+          ghibli: ' rendered in a strongly recognizable Studio Ghibli-inspired hand-painted anime look with delicate cel lines, poetic color harmony, gentle painterly shading, and whimsical cinematic warmth',
+          clay: ' rendered in a strongly recognizable stop-motion claymation look with tactile plasticine texture, handmade imperfections, chunky silhouettes, and miniature studio lighting',
+          handdrawn: ' rendered in a strongly recognizable traditional hand-drawn storybook illustration look with visible pencil lines, watercolor pigment, paper texture, and warm editorial charm',
         }[style];
         storyPrompt = costumeDesc + styleDesc;
         console.log(`[Stylize] LLM costume analysis: ${costumeDesc.slice(0, 80)}...`);
@@ -584,9 +588,9 @@ export async function stylizeCharacter(
       params: {
         // Explicitly tell the model to preserve identity from source image
         prompt:
-          'Keep the exact face and identity from the source photo, but re-dress and re-style the character as: ' +
+          'Keep the exact face identity, age, hairstyle, and key facial proportions from the source photo. Transform the person into a stylized story character with a visibly strong, unmistakable art direction. Re-dress and re-style the character as: ' +
           storyPrompt +
-          '. The face must remain the same person from the input image, only the costume, era, setting, and art style should change.',
+          '. Preserve identity, but push the rendering language hard so the chosen style is immediately obvious at first glance. Change costume, materials, color design, and rendering treatment to match the target style; do not output a weak semi-realistic photo paint-over.',
         image_urls: [photoUrl],
         image_size: '1:1',
         resolution: '1K',
@@ -698,6 +702,59 @@ function recoverContentFromLegacyPayload(parsed: any): string {
   return '';
 }
 
+function escapeControlCharsInJsonStrings(input: string): string {
+  let output = '';
+  let inString = false;
+  let escaped = false;
+
+  for (const char of input) {
+    if (!inString) {
+      output += char;
+      if (char === '"') {
+        inString = true;
+      }
+      continue;
+    }
+
+    if (escaped) {
+      output += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      output += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      output += char;
+      inString = false;
+      continue;
+    }
+
+    if (char === '\n') {
+      output += '\\n';
+      continue;
+    }
+
+    if (char === '\r') {
+      output += '\\r';
+      continue;
+    }
+
+    if (char === '\t') {
+      output += '\\t';
+      continue;
+    }
+
+    output += char;
+  }
+
+  return output;
+}
+
 function tryParseStoryPayload(normalizedContent: string): GeneratedStory | null {
   const fencedContent = stripCodeFence(normalizedContent);
   const jsonMatch = fencedContent.match(/\{[\s\S]*\}/);
@@ -713,7 +770,7 @@ function tryParseStoryPayload(normalizedContent: string): GeneratedStory | null 
     });
 
   try {
-    const parsed = JSON.parse(jsonText);
+    const parsed = JSON.parse(escapeControlCharsInJsonStrings(jsonText));
     const storyboard = normalizeStoryboard(JSON.stringify(parsed), parsed?.title || '');
     const content = recoverContentFromLegacyPayload(parsed) || toStoryContent(storyboard);
 
@@ -833,6 +890,14 @@ const content = (story.content || '').trim();
   return true;
 }
 
+function summarizeStoryGenerationIssue(reason: string, rawContent: string): string {
+  const titleMatch = rawContent.match(/"title"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/);
+  const title = titleMatch?.[1] ? ` title=${titleMatch[1]}` : '';
+  const hasScenes = /"scenes"\s*:\s*\[/.test(rawContent);
+  const hint = rawContent.includes('\n') ? ' Raw response may contain unescaped newlines inside JSON strings.' : '';
+  return `${reason}.${title}${hasScenes ? ' scenes=array-present' : ''}${hint}`.trim();
+}
+
 const STORY_GENERATION_PROMPT = `你是一个专业的儿童童话故事作家兼分镜编剧。请根据用户提供的标题，为{character_desc}创作一个温馨、有教育意义的原创童话故事，并且直接输出新的 storyboard JSON。不要输出旧的 content/scenes 简版结构，也不要输出任何解释文字。
 
 要求：
@@ -850,7 +915,7 @@ const STORY_GENERATION_PROMPT = `你是一个专业的儿童童话故事作家�
 8. scenes 数量由 LLM 根据故事内容的广度和深度自行决定（参考第 3 条），但每幕 storyText 控制在 30 字以内。每个场景都必须支持并尽量填写：id、index、title、titleEn、charactersInScene、storyText、storyTextEn、imageDescription、imageDescriptionEn、imagePrompt、charactersLayout、dialogue、narration、voiceover、voiceoverEn、subtitle、shot、durationSec、musicMood、sfx、image。
 9. dialogue 是数组，每项包含：speakerId、text、textEn、displayOnImage、tts、emotion。
 10. narration 对象包含：text、textEn、displayOnImage、tts、voiceId、voiceIdEn。
-11. subtitle 必须直接输出双语字幕字符串，格式严格为两行：第一行中文，第二行 English sentence。若暂时没有英文，请第二行留空字符串，但字段仍然保留。
+11. subtitle 必须直接输出双语字幕字符串，JSON 字符串内两行必须使用 \\n 转义，例如 "中文一句\\nEnglish sentence"。若暂时没有英文，请第二行留空字符串，但字段仍然保留。
 12. storyText 和 voiceover 要写成适合配音和分镜的完整句子，不要只写摘要；imageDescription 要写成可直接绘制插画的具体画面；imagePrompt 要是适合生成插画的英文提示词。
 13. 每个场景都必须是不同的关键时刻，不能只是重复同一地点或动作的改写；每幕都要有明显不同的视觉焦点。
 14. image 字段保留为空对象 {} 即可，不需要生成 URL。
@@ -987,7 +1052,7 @@ export async function generateStory(title: string, characterDesc: string): Promi
       }
 
       if (attempt === maxAttempts) {
-        throw new Error(`Incomplete story generated after retries: ${result.content}`);
+        throw new Error(summarizeStoryGenerationIssue('Incomplete story generated after retries', result.content));
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

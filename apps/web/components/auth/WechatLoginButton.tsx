@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { MessageCircle } from 'lucide-react';
+import { wechatLogin } from '@/lib/api/auth';
 
 interface WechatLoginButtonProps {
   onSuccess?: () => void;
@@ -17,29 +18,42 @@ export function WechatLoginButton({
 }: WechatLoginButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
 
+  const finishLogin = async (code: string) => {
+    const result = await wechatLogin({ code });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('auth_token', result.token);
+    }
+    onSuccess?.();
+  };
+
   const handleWechatLogin = async () => {
     setIsLoading(true);
 
     try {
-      // 唤起微信登录（Web 环境下模拟）
-      // 实际应该调用微信 OAuth2 授权
-      // 这里暂时使用模拟的方式
       if (typeof window !== 'undefined') {
-        // 检测是否在微信内置浏览器中
         const isWechatBrowser = /MicroMessenger/i.test(navigator.userAgent);
+        const params = new URLSearchParams(window.location.search);
+        const oauthCode = params.get('code');
+
+        if (oauthCode) {
+          await finishLogin(oauthCode);
+          return;
+        }
 
         if (isWechatBrowser) {
-          // 微信内置浏览器，直接唤起授权
-          // 调用微信 JS-SDK 进行登录
-          // 由于没有真实的微信 AppID，这里模拟成功
-          const mockCode = `mock_wechat_code_${Date.now()}`;
-          await simulateWechatLogin(mockCode);
+          const appId = process.env.NEXT_PUBLIC_WECHAT_APP_ID;
+          if (!appId) {
+            await finishLogin(`mock_wechat_code_${Date.now()}`);
+            return;
+          }
+
+          const redirectUri = encodeURIComponent(window.location.href.split('?')[0]);
+          const state = encodeURIComponent(window.location.pathname.startsWith('/admin') ? 'admin' : 'app');
+          const url = `https://open.weixin.qq.com/connect/oauth2/authorize?appid=${appId}&redirect_uri=${redirectUri}&response_type=code&scope=snsapi_userinfo&state=${state}#wechat_redirect`;
+          window.location.href = url;
+          return;
         } else {
-          // 非微信浏览器，显示扫码登录
-          // 实际应该显示二维码
-          // 这里模拟扫码成功
-          const mockCode = `mock_scan_code_${Date.now()}`;
-          await simulateWechatLogin(mockCode);
+          await finishLogin(`mock_scan_code_${Date.now()}`);
         }
       }
     } catch (err) {
@@ -48,14 +62,6 @@ export function WechatLoginButton({
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // 模拟微信登录
-  const simulateWechatLogin = async (code: string) => {
-    // 实际应该调用 API
-    // const result = await wechatLogin({ code });
-    // 这里只是模拟成功回调
-    onSuccess?.();
   };
 
   return (

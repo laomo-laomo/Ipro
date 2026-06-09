@@ -56,6 +56,7 @@ export async function uploadVoice(
     });
 
     xhr.open('POST', `${API_BASE}/api/voices/upload`);
+    xhr.withCredentials = true;
     const tokenHeaders = authHeaders();
     if (tokenHeaders.Authorization) {
       xhr.setRequestHeader('Authorization', tokenHeaders.Authorization);
@@ -71,7 +72,6 @@ export async function getVoices(): Promise<Voice[]> {
   const response = await fetch(`${API_BASE}/api/voices`, {
     method: 'GET',
     headers: jsonHeaders(),
-    credentials: 'include',
   });
 
   const result: ApiResponse<Voice[]> = await response.json();
@@ -88,7 +88,6 @@ export async function getVoice(voiceId: string): Promise<Voice> {
   const response = await fetch(`${API_BASE}/api/voices/${voiceId}`, {
     method: 'GET',
     headers: jsonHeaders(),
-    credentials: 'include',
   });
 
   const result: ApiResponse<Voice> = await response.json();
@@ -109,7 +108,6 @@ export async function cloneVoice(
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify({ name }),
-    credentials: 'include',
   });
 
   const result: ApiResponse<CloneVoiceResponse> = await response.json();
@@ -126,7 +124,6 @@ export async function deleteVoice(voiceId: string): Promise<void> {
   const response = await fetch(`${API_BASE}/api/voices/${voiceId}`, {
     method: 'DELETE',
     headers: jsonHeaders(),
-    credentials: 'include',
   });
 
   const result: ApiResponse<void> = await response.json();

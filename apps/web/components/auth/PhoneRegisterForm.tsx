@@ -65,19 +65,19 @@ export function PhoneRegisterForm({ onSuccess, onError }: PhoneRegisterFormProps
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <label htmlFor="phone" className="text-sm font-medium text-gray-700">手机号</label>
-        <Input id="phone" type="tel" placeholder="请输入手机号" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={11} className="h-11" />
+        <label htmlFor="phone" className="text-sm font-medium text-white/85">手机号</label>
+        <Input id="phone" type="tel" placeholder="请输入手机号" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={11} className="h-11 border-white/20 bg-white/10 text-white placeholder:text-white/40" />
       </div>
       <div className="space-y-2">
-        <label htmlFor="code" className="text-sm font-medium text-gray-700">验证码</label>
+        <label htmlFor="code" className="text-sm font-medium text-white/85">验证码</label>
         <div className="flex gap-2">
-          <Input id="code" type="text" placeholder="请输入验证码" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} maxLength={6} className="h-11 flex-1" />
-          <Button type="button" variant="outline" onClick={handleSendCode} disabled={isSendingCode || countdown > 0} className="h-11 min-w-[100px]">
+          <Input id="code" type="text" placeholder="请输入验证码" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} maxLength={6} className="h-11 flex-1 border-white/20 bg-white/10 text-white placeholder:text-white/40" />
+          <Button type="button" variant="outline" onClick={handleSendCode} disabled={isSendingCode || countdown > 0} className="h-11 min-w-[100px] border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white">
             {countdown > 0 ? `${countdown}s` : isSendingCode ? '发送中...' : '获取验证码'}
           </Button>
         </div>
       </div>
-      <Button type="button" onClick={handleRegister} disabled={isRegistering || !codeSent || code.length !== 6} className="w-full h-11">
+      <Button type="button" variant="magic" onClick={handleRegister} disabled={isRegistering || !codeSent || code.length !== 6} className="h-11 w-full">
         {isRegistering ? <span className="flex items-center gap-2"><span className="animate-spin">⟳</span>注册中...</span> : '注册'}
       </Button>
     </div>

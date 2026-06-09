@@ -57,30 +57,30 @@ export default function VoicesPage() {
   }, [voices, clone, showToast]);
 
   return (
-    <div className="page-shell page-enter space-y-8">
+    <div className="page-shell page-enter space-y-5 md:space-y-8">
       <FadeIn>
-        <section className="flex items-start justify-between gap-4">
+        <section className="flex items-start justify-between gap-3 md:gap-4">
           <div className="flex items-start gap-3">
             <Button variant="ghost" size="icon" onClick={() => router.push('/create/upload')} className="rounded-full">
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
               <p className="text-sm font-medium text-violet-700">我的声音魔法屋</p>
-              <h1 className="mt-2 text-4xl font-bold">把熟悉的声音，留在每一页故事里</h1>
-              <p className="mt-3 max-w-2xl text-base text-muted-foreground">上传 30 秒以上的清晰音频，孩子就能在绘本视频和故事朗读里听见最亲切的声音。</p>
+              <h1 className="mt-2 text-3xl font-bold leading-tight md:text-4xl">把熟悉的声音，留在每一页故事里</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground md:mt-3 md:text-base">上传 30 秒以上的清晰音频，孩子就能在绘本视频和故事朗读里听见最亲切的声音。</p>
             </div>
           </div>
         </section>
       </FadeIn>
 
       <FadeIn delay={0.05}>
-        <GlassCard className="p-6 sm:p-8 transition-transform duration-300 hover:-translate-y-1 hover:shadow-paper">
+        <GlassCard className="p-5 transition-transform duration-300 hover:-translate-y-1 hover:shadow-paper sm:p-8">
           <div className="mb-5 flex items-center gap-3">
             <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-100 text-violet-700">
               <Mic2 className="h-5 w-5" />
             </span>
             <div>
-              <h2 className="text-2xl font-bold">上传音频样本</h2>
+              <h2 className="text-xl font-bold md:text-2xl">上传音频样本</h2>
               <p className="text-sm text-muted-foreground">支持录音或文件上传，建议环境安静、发音清晰。</p>
             </div>
           </div>
@@ -98,7 +98,7 @@ export default function VoicesPage() {
       </FadeIn>
 
       <FadeIn delay={0.08}>
-        <GlassCard className="p-6 sm:p-8 transition-transform duration-300 hover:-translate-y-1 hover:shadow-paper">
+        <GlassCard className="p-5 transition-transform duration-300 hover:-translate-y-1 hover:shadow-paper sm:p-8">
           <div className="flex items-start gap-3">
             <Info className="mt-1 h-5 w-5 text-amber-500" />
             <div>
@@ -123,7 +123,7 @@ export default function VoicesPage() {
           </div>
         ) : voices.length === 0 ? (
           <FadeIn>
-            <GlassCard className="py-16 text-center">
+            <GlassCard className="px-5 py-12 text-center md:py-16">
               <h3 className="text-xl font-bold">还没有保存任何声音</h3>
               <p className="mt-3 text-sm text-muted-foreground">先上传一段样本，故事就能拥有属于你们家的语气和温度。</p>
             </GlassCard>

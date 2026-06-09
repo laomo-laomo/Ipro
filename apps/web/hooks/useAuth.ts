@@ -9,11 +9,13 @@ import {
   loginWithPhone,
   getCurrentUser,
   logout as apiLogout,
+  clearPersistedToken,
 } from '@/lib/api/auth';
 
 interface UseAuthState {
   user: User | null;
   isAuthenticated: boolean;
+  isAdmin: boolean;
   isLoading: boolean;
   error: string | null;
 }
@@ -37,6 +39,7 @@ export function useAuth(): UseAuthState & UseAuthActions {
 
   // Computed
   const isAuthenticated = !!user;
+  const isAdmin = user?.role === 'admin';
 
   // 验证 token 并加载用户信息
   const checkAuth = useCallback(async () => {
@@ -62,10 +65,9 @@ export function useAuth(): UseAuthState & UseAuthActions {
       const result = await loginWithPhone({ phone, code });
       setUser(result.user);
 
-      // 存储 token
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('auth_token', result.token);
-      }
+      // Pull the canonical user payload from /me after login so role and
+      // membership state stay in sync with backend cookies/JWT handling.
+      await checkAuth();
 
       return true;
     } catch (err) {
@@ -75,7 +77,7 @@ export function useAuth(): UseAuthState & UseAuthActions {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [checkAuth]);
 
   // 微信登录
   const loginWithWechatAction = useCallback(async (code: string): Promise<boolean> => {
@@ -86,10 +88,7 @@ export function useAuth(): UseAuthState & UseAuthActions {
       const result = await wechatLogin({ code });
       setUser(result.user);
 
-      // 存储 token
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('auth_token', result.token);
-      }
+      await checkAuth();
 
       return true;
     } catch (err) {
@@ -99,7 +98,7 @@ export function useAuth(): UseAuthState & UseAuthActions {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [checkAuth]);
 
   // 发送验证码
   const sendCodeAction = useCallback(async (phone: string): Promise<boolean> => {
@@ -117,20 +116,17 @@ export function useAuth(): UseAuthState & UseAuthActions {
 
   // 退出登录
   const logoutAction = useCallback(async () => {
+    clearPersistedToken();
+
     try {
       await apiLogout();
-    } catch {
-      // ignore errors
-    }
+    } finally {
+      // 清除本地状态
+      setUser(null);
 
-    // 清除本地状态
-    setUser(null);
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('auth_token');
+      // 跳转到登录页
+      router.push('/login');
     }
-
-    // 跳转到登录页
-    router.push('/login');
   }, [router]);
 
   // 清除错误
@@ -147,6 +143,7 @@ export function useAuth(): UseAuthState & UseAuthActions {
     // State
     user,
     isAuthenticated,
+    isAdmin,
     isLoading,
     error,
 

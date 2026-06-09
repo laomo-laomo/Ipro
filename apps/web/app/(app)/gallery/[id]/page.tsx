@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { GlassCard } from '@/components/magic';
 import { FadeIn } from '@/components/motion';
 import { formatDate, formatDistanceToNow } from '@/lib/utils/date';
+import { formatFileSize } from '@/lib/utils';
 import { IllustrationProgress } from '@/components/story/illustration-progress';
 import { VideoProgress, type VideoProgressData } from '@/components/story/video-progress';
 import { generateAudiobook, getAudiobook, startVideo } from '@/lib/api/story';
@@ -19,7 +20,8 @@ import type { Audiobook } from '@/types/story';
 export default function GalleryDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const storyId = params.id as string;
+  const storyIdParam = params?.id;
+  const storyId = Array.isArray(storyIdParam) ? storyIdParam[0] : storyIdParam ?? '';
 
   const {
     story,
@@ -118,6 +120,7 @@ export default function GalleryDetailPage() {
   const hasCompletedAudio = audiobook?.pages.some((page) => page.status === 'completed' && page.audioUrl) ?? false;
   const audioReadyCount = audiobook?.pages.filter((page) => page.status === 'completed' && page.audioUrl).length ?? 0;
   const segmentsWithImages = segments.filter((segment) => Boolean(segment.imageUrl));
+  const allIllustrationsReady = segments.length > 0 && segmentsWithImages.length === segments.length;
   const totalPages = Math.max(segments.length, 1);
   const isStoryReadyToRead = story?.status === 'completed' || story?.status === 'illustrating' || story?.status === 'rendering';
 
@@ -129,9 +132,16 @@ export default function GalleryDetailPage() {
   // Build video progress data
   const videoProgressData: VideoProgressData = {
     status: (story?.videoStatus as VideoProgressData['status']) || 'pending',
-    progress: story?.videoStatus === 'completed' ? 100 : story?.videoStatus === 'processing' ? 50 : 0,
+    progress: story?.videoStatus === 'completed' ? 100 : isStartingVideo ? 12 : story?.videoStatus === 'processing' ? 58 : 0,
     videoUrl: story?.videoUrl,
+    message: isStartingVideo ? '正在创建视频任务，请不要关闭页面' : undefined,
   };
+
+  const videoReadyMeta = [
+    story?.videoDuration ? `${Math.round(story.videoDuration)} 秒` : null,
+    story?.videoResolution || null,
+    story?.videoFileSize ? formatFileSize(story.videoFileSize) : null,
+  ].filter(Boolean);
 
   const handleImageClick = useCallback((index: number) => {
     setViewerInitialIndex(index);
@@ -272,10 +282,13 @@ export default function GalleryDetailPage() {
       // progress view (rather than the "no video yet" placeholder inside
       // VideoProgress) while the request is in flight.
       setIsPollingVideo(true);
-      await startVideo(storyId, requestBody);
+      const result = await startVideo(storyId, requestBody);
       // Kick a fresh fetch so the videoStatus becomes 'completed' (inline
       // path) or 'processing' (Bull path) and the existing useEffect
       // (line 75) takes over polling.
+      if (result.videoUrl) {
+        setIsPollingVideo(false);
+      }
       await refreshVideo();
     } catch (err) {
       const message = err instanceof Error ? err.message : '启动视频生成失败';
@@ -362,7 +375,7 @@ export default function GalleryDetailPage() {
 
   if (!hasReadableContent || !isStoryReadyToRead) {
     return (
-      <div className="page-shell page-enter space-y-6">
+      <div className="page-shell page-enter space-y-5 md:space-y-6">
         <FadeIn>
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={handleBack} className="rounded-full">
@@ -370,14 +383,14 @@ export default function GalleryDetailPage() {
             </Button>
             <div>
               <p className="text-sm font-medium text-violet-700">绘本准备中</p>
-              <h1 className="mt-2 text-3xl font-bold sm:text-4xl">{story.title}</h1>
+              <h1 className="mt-1 text-2xl font-bold leading-tight sm:text-4xl">{story.title}</h1>
             </div>
           </div>
         </FadeIn>
 
         {hasReadableContent && segments.length > 0 && (
           <FadeIn delay={0.05}>
-            <GlassCard className="p-6">
+            <GlassCard className="p-5 md:p-6">
               <IllustrationProgress
                 segments={segments}
                 isPolling={isPollingIllustrations}
@@ -389,7 +402,7 @@ export default function GalleryDetailPage() {
         )}
 
         <FadeIn delay={0.08}>
-          <GlassCard className="p-8 text-center sm:p-10">
+          <GlassCard className="p-6 text-center sm:p-10">
             <Sparkles className="mx-auto h-12 w-12 text-violet-600" />
             <h2 className="mt-4 text-2xl font-bold">这本绘本还没有准备好翻阅</h2>
             <p className="mt-3 text-sm leading-7 text-muted-foreground">
@@ -404,7 +417,7 @@ export default function GalleryDetailPage() {
                 已生成插画 {segmentsWithImages.length} 张
               </span>
             </div>
-            <div className="mt-6 flex justify-center gap-3">
+            <div className="mt-6 grid gap-3 sm:flex sm:justify-center">
               <Button variant="outline" onClick={handleBack} className="rounded-full">
                 返回作品列表
               </Button>
@@ -419,17 +432,17 @@ export default function GalleryDetailPage() {
   }
 
   return (
-    <div className="page-shell page-enter space-y-6">
+    <div className="page-shell page-enter space-y-5 md:space-y-6">
       <FadeIn>
-        <section className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <section className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between md:gap-4">
           <div className="flex items-start gap-3">
             <Button variant="ghost" size="icon" onClick={handleBack} className="rounded-full">
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
               <p className="text-sm font-medium text-violet-700">翻阅绘本</p>
-              <h1 className="mt-2 text-3xl font-bold sm:text-4xl">{story.title}</h1>
-              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+              <h1 className="mt-1 text-2xl font-bold leading-tight sm:text-4xl">{story.title}</h1>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground md:gap-3 md:text-sm">
                 <span className="inline-flex items-center gap-1 rounded-full bg-white/80 px-3 py-1 shadow-sm">
                   <Clock className="h-3.5 w-3.5" />
                   {formatDistanceToNow(story.createdAt)}
@@ -444,7 +457,7 @@ export default function GalleryDetailPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             <Button variant="outline" size="sm" onClick={handleShare} className="rounded-full">
               <Share2 className="h-4 w-4" />
               分享
@@ -458,10 +471,10 @@ export default function GalleryDetailPage() {
       </FadeIn>
 
       <FadeIn delay={0.05}>
-        <div className="overflow-hidden rounded-3xl border border-white/60 bg-white shadow-2xl">
+        <div className="overflow-hidden rounded-[24px] border border-white/60 bg-white shadow-2xl md:rounded-3xl">
           <div className="grid gap-0 lg:grid-cols-[1fr_1fr]">
             {/* 左侧插画区域 */}
-            <div className="relative min-h-[500px] overflow-hidden bg-gradient-to-br from-[#1a1035] via-[#2d1b4e] to-[#1a1035]">
+            <div className="relative min-h-[360px] overflow-hidden bg-gradient-to-br from-[#1a1035] via-[#2d1b4e] to-[#1a1035] sm:min-h-[440px] lg:min-h-[500px]">
               <button
                 type="button"
                 onClick={() => currentSegment?.imageUrl && handleImageClick(safeCurrentPage)}
@@ -497,8 +510,8 @@ export default function GalleryDetailPage() {
               </button>
 
               {/* 底部场景指示器 */}
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2">
-                <div className="flex items-center gap-2 rounded-full bg-black/30 px-4 py-2 backdrop-blur-sm">
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 md:bottom-6">
+                <div className="flex max-w-[80vw] items-center gap-2 overflow-x-auto rounded-full bg-black/30 px-4 py-2 backdrop-blur-sm">
                   {segments.map((segment, index) => (
                     <button
                       key={segment.id}
@@ -516,19 +529,19 @@ export default function GalleryDetailPage() {
             </div>
 
             {/* 右侧 - 只放音频控件。故事正文已由生成图片承载，不再重复叠加。 */}
-            <div className="relative flex min-h-[500px] flex-col justify-between gap-6 bg-gradient-to-b from-[#f8f9ff] via-white to-[#fff8f5] px-8 py-8 lg:px-12 lg:py-12">
+            <div className="relative flex min-h-[280px] flex-col justify-between gap-5 bg-gradient-to-b from-[#f8f9ff] via-white to-[#fff8f5] px-4 py-5 sm:px-6 lg:min-h-[500px] lg:px-12 lg:py-12">
               <div className="flex flex-col justify-center gap-4">
                 {/* 小场景标题 - 仅做上下文标识，不展示完整正文（正文在图上） */}
                 <div className="text-center">
                   <p className="text-xs font-semibold tracking-[0.18em] text-rose-400 uppercase">
                     第 {safeCurrentPage + 1} 页
                   </p>
-                  <h2 className="mt-1 text-2xl font-bold text-rose-500 lg:text-3xl">
+                  <h2 className="mt-1 text-xl font-bold leading-tight text-rose-500 lg:text-3xl">
                     {currentSegment?.title || story.title}
                   </h2>
                 </div>
 
-                <div className="rounded-2xl border border-rose-100 bg-white/80 p-4 shadow-sm backdrop-blur-sm">
+                <div className="rounded-2xl border border-rose-100 bg-white/80 p-3 shadow-sm backdrop-blur-sm md:p-4">
                     {currentAudioUrl ? (
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
@@ -590,11 +603,11 @@ export default function GalleryDetailPage() {
               </div>
 
               {/* 翻页按钮 - 底部 */}
-              <div className="mt-auto flex gap-4 pt-2">
+              <div className="mt-auto grid grid-cols-2 gap-3 pt-1 md:flex md:gap-4 md:pt-2">
                 <button
                   onClick={() => goToPage(safeCurrentPage - 1)}
                   disabled={safeCurrentPage === 0}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl border-2 border-gray-200 bg-white/80 py-4 text-sm font-medium text-gray-500 backdrop-blur-sm transition-all hover:border-rose-300 hover:bg-white hover:text-rose-500 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl border-2 border-gray-200 bg-white/80 py-3 text-sm font-medium text-gray-500 backdrop-blur-sm transition-all hover:border-rose-300 hover:bg-white hover:text-rose-500 disabled:cursor-not-allowed disabled:opacity-40 md:py-4"
                   aria-label="上一页"
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -603,7 +616,7 @@ export default function GalleryDetailPage() {
                 <button
                   onClick={() => goToPage(safeCurrentPage + 1)}
                   disabled={safeCurrentPage >= totalPages - 1}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-rose-400 via-fuchsia-500 to-rose-500 py-4 text-sm font-semibold text-white shadow-lg shadow-rose-500/30 backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-rose-400 via-fuchsia-500 to-rose-500 py-3 text-sm font-semibold text-white shadow-lg shadow-rose-500/30 backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40 md:py-4"
                   aria-label="下一页"
                 >
                   <span>下一页</span>
@@ -617,7 +630,7 @@ export default function GalleryDetailPage() {
 
       {hasPendingIllustrations && (
         <FadeIn delay={0.05}>
-          <GlassCard className="p-6">
+          <GlassCard className="p-5 md:p-6">
             <IllustrationProgress
               segments={segments}
               isPolling={isPollingIllustrations}
@@ -630,7 +643,7 @@ export default function GalleryDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_0.95fr]">
         <FadeIn delay={0.08}>
-          <GlassCard className="p-6 transition-transform duration-300 hover:-translate-y-1 hover:shadow-paper">
+          <GlassCard className="p-5 transition-transform duration-300 hover:-translate-y-1 hover:shadow-paper md:p-6">
             <h3 className="text-xl font-bold">故事信息</h3>
             <div className="mt-4 space-y-3 text-sm text-muted-foreground">
               <p>创建时间：{formatDate(story.createdAt)}</p>
@@ -641,44 +654,73 @@ export default function GalleryDetailPage() {
         </FadeIn>
 
         <FadeIn delay={0.12}>
-          <GlassCard className="p-6 transition-transform duration-300 hover:-translate-y-1 hover:shadow-paper">
+          <GlassCard className="p-5 transition-transform duration-300 hover:-translate-y-1 hover:shadow-paper md:p-6">
             <h3 className="mb-4 text-xl font-bold">视频故事</h3>
             {story.videoUrl ? (
-              <VideoPlayer src={story.videoUrl} title={story.title} />
+              <div className="space-y-4">
+                <VideoPlayer src={story.videoUrl} title={story.title} />
+                <div className="flex flex-col gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-emerald-700">视频已生成，可以直接播放或保存</p>
+                    {videoReadyMeta.length > 0 && (
+                      <p className="mt-1 text-xs text-emerald-700/80">{videoReadyMeta.join(' · ')}</p>
+                    )}
+                  </div>
+                  <a
+                    href={story.videoUrl}
+                    download={`${story.title || '视频故事'}.mp4`}
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-emerald-200 bg-white px-4 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50"
+                  >
+                    <Download className="h-4 w-4" />
+                    保存 MP4
+                  </a>
+                </div>
+              </div>
             ) : story.videoStatus === 'processing' || (story.videoStatus === 'pending' && isPollingVideo) ? (
-              <>
-                <VideoProgress
-                  data={videoProgressData}
-                  isPolling={isPollingVideo}
-                  onRetry={async () => { /* TODO: implement video retry */ }}
-                />
-              </>
+              <VideoProgress
+                data={videoProgressData}
+                isPolling={isPollingVideo}
+                onRetry={handleStartVideo}
+              />
             ) : story.videoStatus === 'failed' ? (
-              <div className="space-y-3">
-                <p className="text-sm text-destructive">视频生成失败，请重试</p>
+              <div className="space-y-4 rounded-2xl border border-rose-100 bg-rose-50/60 p-4">
+                <div>
+                  <p className="text-sm font-semibold text-rose-700">视频生成失败</p>
+                  <p className="mt-1 text-xs text-rose-600">可以直接重试；系统会优先复用已生成的旁白，减少等待。</p>
+                </div>
                 <Button
                   onClick={handleStartVideo}
-                  disabled={isStartingVideo || segmentsWithImages.length === 0}
+                  disabled={isStartingVideo || !allIllustrationsReady}
+                  className="w-full rounded-full sm:w-auto"
                 >
                   {isStartingVideo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                  重新生成视频
+                  {isStartingVideo ? '正在重新提交...' : '重新生成视频'}
                 </Button>
                 {videoStartError && <p className="text-xs text-destructive">{videoStartError}</p>}
               </div>
             ) : (
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  把这本绘本和旁白烧成一段 MP4 视频，支持 App 与微信小程序原生播放。
-                </p>
+              <div className="space-y-4 rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
+                <div>
+                  <p className="text-sm font-semibold text-violet-700">生成一段可分享的 MP4 视频故事</p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    系统会把每页插画和旁白合成为视频。已有有声绘本时会优先复用旁白，通常更快，也避免重复生成配音。
+                  </p>
+                </div>
+                <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                  <span className="rounded-full bg-white/80 px-3 py-1">插画 {segmentsWithImages.length}/{segments.length}</span>
+                  <span className="rounded-full bg-white/80 px-3 py-1">旁白 {audioReadyCount}/{segments.length}</span>
+                  <span className="rounded-full bg-white/80 px-3 py-1">预计约 1-3 分钟</span>
+                </div>
                 <Button
                   onClick={handleStartVideo}
-                  disabled={isStartingVideo || segmentsWithImages.length === 0}
+                  disabled={isStartingVideo || !allIllustrationsReady}
+                  className="w-full rounded-full sm:w-auto"
                 >
                   {isStartingVideo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                  {audiobook?.pages?.length ? '用现有旁白生成视频' : '生成视频故事'}
+                  {isStartingVideo ? '正在提交视频任务...' : audiobook?.pages?.length ? '用现有旁白生成视频' : '生成视频故事'}
                 </Button>
-                {segmentsWithImages.length === 0 && (
-                  <p className="text-xs text-muted-foreground">需要先生成插画才能制作视频</p>
+                {!allIllustrationsReady && (
+                  <p className="text-xs text-muted-foreground">需要先完成全部插画才能制作视频。</p>
                 )}
                 {videoStartError && <p className="text-xs text-destructive">{videoStartError}</p>}
               </div>

@@ -95,6 +95,11 @@
     @apply mx-auto w-full max-w-6xl px-4 pb-24 pt-8 sm:px-6 lg:px-8;
   }
 
+  .mobile-action-bar {
+    @apply fixed left-0 right-0 z-40 border-t border-white/70 bg-white/90 px-4 py-3 shadow-[0_-18px_45px_-30px_rgba(76,29,149,0.6)] backdrop-blur-xl;
+    bottom: calc(4.2rem + env(safe-area-inset-bottom));
+  }
+
   .page-enter {
     animation: page-enter 0.35s ease-out;
   }
@@ -137,6 +142,44 @@
 
   50% {
     transform: translateY(-10px);
+  }
+}
+
+@media (max-width: 767px) {
+  body {
+    background-image:
+      linear-gradient(180deg, rgba(255, 251, 245, 0.98), rgba(255, 247, 237, 0.95)),
+      radial-gradient(circle at 20% 0%, rgba(124, 58, 237, 0.16), transparent 36%),
+      radial-gradient(circle at 90% 12%, rgba(245, 158, 11, 0.14), transparent 30%);
+    background-size: auto;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: 0;
+  }
+
+  .page-shell {
+    max-width: 28rem;
+    padding: 1rem 0.875rem calc(7.5rem + env(safe-area-inset-bottom));
+  }
+
+  .paper-panel {
+    border-radius: 22px;
+    box-shadow: 0 18px 42px -28px rgba(76, 29, 149, 0.45);
+  }
+
+  .mobile-action-bar {
+    bottom: calc(4.15rem + env(safe-area-inset-bottom));
+    padding-bottom: 0.75rem;
+  }
+
+  input,
+  textarea,
+  select {
+    font-size: 16px;
   }
 }
 

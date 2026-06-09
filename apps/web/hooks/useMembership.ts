@@ -5,11 +5,13 @@ import type {
   MembershipStatus,
   MembershipTier,
   OrderCreateResponse,
+  RedeemResult,
 } from '@/types/membership';
 import {
   getMembershipStatus,
   createMembershipOrder,
   getOrderStatus,
+  redeemMembershipCode,
 } from '@/lib/api/membership';
 
 export interface UseMembershipState {
@@ -18,6 +20,7 @@ export interface UseMembershipState {
   
   // Order state
   currentOrder: OrderCreateResponse | null;
+  lastRedeemResult: RedeemResult | null;
   
   // Loading states
   isLoading: boolean;
@@ -43,6 +46,8 @@ export interface UseMembershipActions {
     orderId: string;
     status: 'pending' | 'paid' | 'failed' | 'refunded';
   } | null>;
+
+  redeemCode: (code: string) => Promise<RedeemResult | null>;
   
   // Reset
   reset: () => void;
@@ -55,6 +60,7 @@ export function useMembership(): UseMembershipState & UseMembershipActions {
   
   // Current order
   const [currentOrder, setCurrentOrder] = useState<OrderCreateResponse | null>(null);
+  const [lastRedeemResult, setLastRedeemResult] = useState<RedeemResult | null>(null);
   
   // Loading states
   const [isLoading, setIsLoading] = useState(false);
@@ -119,10 +125,31 @@ export function useMembership(): UseMembershipState & UseMembershipActions {
     }
   }, []);
 
+  const redeemCode = useCallback(async (code: string): Promise<RedeemResult | null> => {
+    setIsPurchasing(true);
+    setPurchaseError(null);
+    setError(null);
+
+    try {
+      const result = await redeemMembershipCode(code);
+      setLastRedeemResult(result);
+      await loadMembershipStatus();
+      return result;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '兑换失败';
+      setPurchaseError(message);
+      setError(message);
+      return null;
+    } finally {
+      setIsPurchasing(false);
+    }
+  }, [loadMembershipStatus]);
+
   // Reset all state
   const reset = useCallback(() => {
     setMembership(null);
     setCurrentOrder(null);
+    setLastRedeemResult(null);
     setIsLoading(false);
     setIsPurchasing(false);
     setError(null);
@@ -139,6 +166,7 @@ export function useMembership(): UseMembershipState & UseMembershipActions {
     // State
     membership,
     currentOrder,
+    lastRedeemResult,
     isLoading,
     isPurchasing,
     error,
@@ -148,6 +176,7 @@ export function useMembership(): UseMembershipState & UseMembershipActions {
     loadMembershipStatus,
     purchaseMembership,
     checkOrderStatus,
+    redeemCode,
     reset,
     resetError,
   };
