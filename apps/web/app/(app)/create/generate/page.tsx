@@ -147,6 +147,9 @@ function GenerateContent() {
       story.segments.length === 0 ||
       // Don't auto-trigger if any scene is still working OR if any scene has hard-failed
       // (a hard failure needs the user to read the error and decide whether to retry).
+      // After the previous fix in normalizeStory, segments with a real imageUrl
+      // are always 'completed', so this check now also covers "all scenes have
+      // their image already — don't kick off a second illustration job".
       story.segments.some((segment) =>
         segment.imageUrl ||
         segment.imageStatus === 'generating' ||

@@ -183,14 +183,27 @@ function normalizeStory(story: ApiStory): Story {
     const rowImageUrl = illustration?.imageUrl;
     const rowErrorMessage = illustration?.errorMessage;
 
+    // Defensive: if the illustration row OR the storyboard scene already has a
+    // CDN URL, the image was generated successfully — promote to 'completed'
+    // even if the row.status is stale or the storyboard image.status lags
+    // (which happens when the AI service writes the row transactionally but
+    // never back-fills scenes[].image.status). Without this, the page falls
+    // back to the storyboard's null/undefined → 'pending' or 'failed' and
+    // shows a 7-card "生成失败" wall even though all 7 URLs are real.
+    const resolvedImageUrl = resolveAssetUrl(rowImageUrl ?? scene.image?.url);
+    const fallbackStatus = mapImageStatus(rowStatus ?? scene.image?.status);
+    const finalStatus = resolvedImageUrl && !fallbackStatus?.startsWith('completed')
+      ? 'completed'
+      : fallbackStatus;
+
     return {
       id: scene.id || `segment-${order - 1}`,
       order,
       title: scene.title || `第 ${order} 幕`,
       content: scene.storyText || scene.voiceover || '',
       sceneDesc: scene.imageDescription || '',
-      imageUrl: resolveAssetUrl(rowImageUrl ?? scene.image?.url),
-      imageStatus: mapImageStatus(rowStatus ?? scene.image?.status),
+      imageUrl: resolvedImageUrl,
+      imageStatus: finalStatus,
       // Surface the row's error message to the UI; the storyboard's image.errorMessage
       // is kept for backward compat but the row is more reliable.
       errorMessage: rowErrorMessage || scene.image?.errorMessage || undefined,
