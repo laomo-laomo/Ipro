@@ -6,25 +6,44 @@ import { ArrowRight, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CreationStepper } from '@/components/ui/creation-stepper';
 import { CharacterStylizer } from '@/components/ui/character-stylizer';
+import { CustomStyleEditor, ConfirmDialog } from '@/components/ui/custom-style-editor';
 import { useCharacter } from '@/hooks/useCharacter';
 import { useStory } from '@/hooks/useStory';
 import { useToast } from '@/components/ui/toast';
 import { GlassCard } from '@/components/magic';
 import { FadeIn, StaggerItem, StaggerList } from '@/components/motion';
-import type { StyleType } from '@/types/character';
+import type { CustomStylePrompt, StyleInput } from '@/types/character';
+import {
+  customStyleIdFromValue,
+  customStyleValue,
+  isCustomStyleValue,
+  isPresetStyleValue,
+} from '@/components/ui/style-selector';
+import {
+  deleteCustomStyle,
+  listCustomStyles,
+} from '@/lib/api/style';
 
 function StylizeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const characterId = searchParams?.get('characterId') ?? null;
   const storyId = searchParams?.get('storyId') ?? null;
-  const { success: showToast } = useToast();
-const { story, loadStory } = useStory();
-  const [selectedStyle, setSelectedStyle] = useState<StyleType>('pixar');
+  const { success: showToast, error: showError } = useToast();
+  const { story, loadStory } = useStory();
+  // `selectedStyle` is a string union of preset keys and `custom:<id>`.
+  // We resolve it into a real StyleInput only at submit time so the picker
+  // UI stays decoupled from the wire shape.
+  const [selectedStyle, setSelectedStyle] = useState<string>('pixar');
   const [stylizeDone, setStylizeDone] = useState(false);
+  const [customStyles, setCustomStyles] = useState<CustomStylePrompt[]>([]);
+  const [customLoading, setCustomLoading] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingStyle, setEditingStyle] = useState<CustomStylePrompt | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<CustomStylePrompt | null>(null);
   const { character, isLoading, isStylizing, stylizeError, error, loadCharacter, stylize, resetError } = useCharacter();
 
-// Reset completion state when character changes (e.g., selecting a different photo)
+  // Reset completion state when character changes (e.g., selecting a different photo)
   // Only treat a stylizedPhotoUrl as "completed" if it's a real result, not a dev placeholder
   // Reset stylize done when character changes
   useEffect(() => {
@@ -39,29 +58,117 @@ const { story, loadStory } = useStory();
     }
   }, [character?.id]);
 
-const stylizeLockRef = useRef(false);
+  const stylizeLockRef = useRef(false);
 
   // Reset lock when character or style changes
   useEffect(() => {
     stylizeLockRef.current = false;
   }, [character?.id, selectedStyle]);
 
+  // Load the caller's custom styles on mount. Failures are non-fatal — the
+  // preset cards still work even if the custom styles endpoint is down.
+  const refreshCustomStyles = useCallback(async () => {
+    setCustomLoading(true);
+    try {
+      const list = await listCustomStyles();
+      setCustomStyles(list);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '获取自定义风格失败';
+      // Toast but don't unmount — picker still works with the 8 presets.
+      showError(message);
+    } finally {
+      setCustomLoading(false);
+    }
+  }, [showError]);
+
+  useEffect(() => {
+    refreshCustomStyles();
+  }, [refreshCustomStyles]);
+
+  // If the currently selected custom style disappears (e.g. user deletes it
+  // from elsewhere), gracefully fall back to the first preset.
+  useEffect(() => {
+    if (!isCustomStyleValue(selectedStyle)) return;
+    const id = customStyleIdFromValue(selectedStyle);
+    if (id && !customStyles.some((s) => s.id === id)) {
+      setSelectedStyle('pixar');
+    }
+  }, [customStyles, selectedStyle]);
+
+  const resolveStyleInput = useCallback(
+    (value: string): StyleInput => {
+      if (isPresetStyleValue(value)) return value;
+      if (isCustomStyleValue(value)) {
+        const id = customStyleIdFromValue(value);
+        const match = id ? customStyles.find((s) => s.id === id) : null;
+        if (match) {
+          return {
+            id: match.id,
+            name: match.name,
+            prompt: match.prompt,
+            colorTheme: match.colorTheme,
+            iconName: match.iconName,
+          };
+        }
+      }
+      return 'pixar';
+    },
+    [customStyles]
+  );
+
   const handleStylize = useCallback(async () => {
     if (stylizeLockRef.current || isStylizing) return;
     stylizeLockRef.current = true;
-    const result = await stylize(selectedStyle, story?.title);
+    const styleInput = resolveStyleInput(selectedStyle);
+    const result = await stylize(styleInput, story?.title);
     stylizeLockRef.current = false;
     if (result) {
       showToast('风格化完成！');
       setStylizeDone(true);
     }
-  }, [selectedStyle, story?.title, stylize, showToast, isStylizing]);
+  }, [selectedStyle, story?.title, stylize, showToast, isStylizing, resolveStyleInput]);
 
   const handleContinue = useCallback(() => {
     if (isStylizing) return;
     if (storyId) router.push(`/create/generate?storyId=${storyId}`);
     else if (characterId) router.push(`/create/story?characterId=${characterId}`);
   }, [characterId, storyId, router, isStylizing]);
+
+  const openCreate = useCallback(() => {
+    setEditingStyle(null);
+    setEditorOpen(true);
+  }, []);
+
+  const openEdit = useCallback((id: string) => {
+    const target = customStyles.find((s) => s.id === id) ?? null;
+    setEditingStyle(target);
+    setEditorOpen(true);
+  }, [customStyles]);
+
+  const requestDelete = useCallback((id: string) => {
+    const target = customStyles.find((s) => s.id === id) ?? null;
+    setPendingDelete(target);
+  }, [customStyles]);
+
+  const confirmDelete = useCallback(async () => {
+    const target = pendingDelete;
+    if (!target) return;
+    try {
+      await deleteCustomStyle(target.id);
+      setCustomStyles((prev) => prev.filter((s) => s.id !== target.id));
+      // If the deleted style was the active selection, fall back to the
+      // first preset so the user isn't stranded on an empty selection.
+      if (selectedStyle === customStyleValue(target.id)) {
+        setSelectedStyle('pixar');
+      }
+      showToast('自定义风格已删除');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '删除失败';
+      showError(message);
+    } finally {
+      setPendingDelete(null);
+    }
+  }, [pendingDelete, selectedStyle, showToast, showError]);
 
   return (
     <div className="page-shell page-enter space-y-5 pb-36 md:space-y-6 md:pb-28">
@@ -95,6 +202,10 @@ const stylizeLockRef = useRef(false);
                   setSelectedStyle(style);
                   resetError();
                 }}
+                customStyles={customStyles}
+                onCreateCustom={openCreate}
+                onEditCustom={openEdit}
+                onDeleteCustom={requestDelete}
                 onStylize={handleStylize}
                 onReset={() => {}}
                 isStylizing={isStylizing}
@@ -144,6 +255,48 @@ const stylizeLockRef = useRef(false);
       )}
 
       {(error || stylizeError) && <div className="rounded-[20px] bg-destructive/10 p-4 text-sm text-destructive">{error || stylizeError}</div>}
+
+      {/* Quietly log customLoading so an empty list during the initial fetch
+          doesn't look like "the user has no custom styles" — keeping the
+          state in scope also lets us flip the empty-card UI later. */}
+      {customLoading && customStyles.length === 0 ? null : null}
+
+      <CustomStyleEditor
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        editing={editingStyle}
+        onSaved={(saved) => {
+          // Optimistic merge into the local list, then re-fetch from the
+          // server so a rejected save doesn't leave a stale row in state.
+          setCustomStyles((prev) => {
+            const next = prev.filter((s) => s.id !== saved.id);
+            next.unshift(saved);
+            return next;
+          });
+          // Promote the freshly-saved style to the active selection so the
+          // user can immediately apply it without a second click.
+          setSelectedStyle(customStyleValue(saved.id));
+          // Re-sync in the background to pick up server-side timestamps.
+          refreshCustomStyles();
+        }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="删除自定义风格？"
+        message={
+          pendingDelete ? (
+            <span>
+              即将删除「<span className="font-semibold text-foreground/80">{pendingDelete.name}</span>」,此操作不可撤销。
+            </span>
+          ) : null
+        }
+        confirmLabel="删除"
+        cancelLabel="再想想"
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

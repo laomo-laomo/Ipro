@@ -4,13 +4,20 @@ import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from './button';
 import { StyleSelector } from './style-selector';
-import type { Character, StyleType } from '@/types/character';
+import type { Character, CustomStylePrompt } from '@/types/character';
 import { Check, Image as ImageIcon, Loader2, RotateCcw, Sparkles } from 'lucide-react';
 
 export interface CharacterStylizerProps {
   character: Character;
-  selectedStyle: StyleType;
-  onStyleChange: (style: StyleType) => void;
+  // Either a StyleType preset key (e.g. "pixar") or a `custom:<id>` string
+  // for a user-defined style. The parent resolves it into the actual
+  // StyleInput sent to /stylize.
+  selectedStyle: string;
+  onStyleChange: (style: string) => void;
+  customStyles?: CustomStylePrompt[];
+  onCreateCustom?: () => void;
+  onEditCustom?: (id: string) => void;
+  onDeleteCustom?: (id: string) => void;
   onStylize: () => void;
   onReset: () => void;
   onStylizeComplete?: () => void;
@@ -24,6 +31,10 @@ export function CharacterStylizer({
   character,
   selectedStyle,
   onStyleChange,
+  customStyles,
+  onCreateCustom,
+  onEditCustom,
+  onDeleteCustom,
   onStylize,
   isStylizing = false,
   stylizeError = null,
@@ -135,7 +146,15 @@ return (
           <p className="text-sm font-medium text-rose-600">选择风格</p>
           <h3 className="mt-1 text-lg font-bold md:text-xl">挑一个最像你心中童话世界的画风</h3>
         </div>
-        <StyleSelector selectedStyle={selectedStyle} onStyleChange={onStyleChange} disabled={disabled || isStylizing} />
+        <StyleSelector
+          selectedStyle={selectedStyle}
+          onStyleChange={onStyleChange}
+          customStyles={customStyles}
+          onCreateCustom={onCreateCustom}
+          onEditCustom={onEditCustom}
+          onDeleteCustom={onDeleteCustom}
+          disabled={disabled || isStylizing}
+        />
 
 <div className="mt-5 flex gap-3">
           <Button onClick={onStylize} disabled={disabled || isStylizing} className="flex-1 rounded-full" variant="magic">
