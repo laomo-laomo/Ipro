@@ -4,29 +4,36 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { BookOpen, FolderHeart, Home, Images, LogOut, Menu, Mic2, Sparkles, UserRound, X } from 'lucide-react';
+import { BookOpen, FolderHeart, Home, Images, LogOut, Menu, Mic2, Palette, Sparkles, UserRound, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthContext } from '@/providers/AuthProvider';
 import { Button } from './button';
 
+// Top-level navigation. We surface 风格 as its own entry so it sits next to
+// 我的作品 / 素材库 — matches the user's mental model of "my role / my
+// picture book / my style" as parallel resources.
 const NAV_ITEMS = [
   { href: '/', label: '首页', icon: Home },
   { href: '/create/upload', label: '创作', icon: Sparkles },
   { href: '/gallery', label: '作品', icon: Images },
+  { href: '/styles', label: '风格', icon: Palette },
   { href: '/membership', label: '我的', icon: UserRound },
 ];
 
+// Mobile bottom bar runs out of room at 6 items, so 素材 drops into the
+// drawer while 风格 promotes to the bottom tab.
 const MOBILE_NAV_ITEMS = [
   { href: '/', label: '首页', icon: Home },
   { href: '/create/upload', label: '创作', icon: Sparkles },
   { href: '/gallery', label: '作品', icon: Images },
-  { href: '/assets', label: '素材', icon: FolderHeart },
+  { href: '/styles', label: '风格', icon: Palette },
   { href: '/membership', label: '我的', icon: UserRound },
 ];
 
 const MORE_ITEMS = [
   { href: '/create/upload', label: '开始创作', caption: '照片、风格、故事、绘本', icon: Sparkles },
   { href: '/gallery', label: '我的作品', caption: '绘本、角色、视频', icon: BookOpen },
+  { href: '/styles', label: '风格库', caption: '预设 + 你的专属画风', icon: Palette },
   { href: '/assets', label: '素材库', caption: '照片、插画、声音资产', icon: FolderHeart },
   { href: '/voices', label: '声音魔法屋', caption: '上传音频与声音克隆', icon: Mic2 },
   { href: '/membership', label: '会员权益', caption: '额度、套餐与当前状态', icon: UserRound },

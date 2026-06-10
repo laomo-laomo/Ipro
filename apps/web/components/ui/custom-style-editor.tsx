@@ -1,52 +1,20 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Loader2, X } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from './button';
-import { Input } from './input';
 import { useToast } from './toast';
-import {
-  createCustomStyle,
-  updateCustomStyle,
-  type CreateCustomStyleInput,
-} from '@/lib/api/style';
 import { getStyleIcon, getStyleSurface } from './style-selector';
+import {
+  CustomStyleFormFields,
+  DEFAULT_FORM,
+  formFromStyle,
+  useCustomStyleForm,
+  type FormState,
+} from './custom-style-form';
 import type { CustomStylePrompt } from '@/types/character';
-
-// Reuse the same whitelist the backend validator enforces, so the picker
-// only ever submits a value the API will accept. If the user picks an icon
-// the backend doesn't know about the create call 400s — easier to keep
-// these two arrays in lockstep than to surface a validation error.
-const COLOR_OPTIONS = [
-  { value: 'orange', label: '暖橙' },
-  { value: 'sky', label: '天蓝' },
-  { value: 'emerald', label: '森林' },
-  { value: 'rose', label: '樱粉' },
-  { value: 'violet', label: '紫罗兰' },
-  { value: 'amber', label: '琥珀' },
-  { value: 'cyan', label: '青蓝' },
-  { value: 'lime', label: '嫩绿' },
-] as const;
-
-const ICON_OPTIONS = [
-  'Sparkles',
-  'Palette',
-  'Brush',
-  'Wand2',
-  'Stars',
-  'Flame',
-  'Snowflake',
-  'Sun',
-  'Moon',
-  'Cloud',
-] as const;
-
-const NAME_MIN = 1;
-const NAME_MAX = 30;
-const PROMPT_MIN = 1;
-const PROMPT_MAX = 2000;
 
 export interface CustomStyleEditorProps {
   // Open / close the dialog. The parent owns the state.
@@ -61,20 +29,6 @@ export interface CustomStyleEditorProps {
   onSaved?: (saved: CustomStylePrompt) => void;
 }
 
-interface FormState {
-  name: string;
-  prompt: string;
-  colorTheme: string;
-  iconName: string;
-}
-
-const DEFAULT_FORM: FormState = {
-  name: '',
-  prompt: '',
-  colorTheme: 'violet',
-  iconName: 'Sparkles',
-};
-
 export function CustomStyleEditor({
   open,
   onOpenChange,
@@ -83,28 +37,32 @@ export function CustomStyleEditor({
 }: CustomStyleEditorProps): ReactNode {
   const isEditMode = Boolean(editing);
   const { success: showSuccess, error: showError } = useToast();
-  const [form, setForm] = useState<FormState>(DEFAULT_FORM);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  // Reset the form whenever the dialog opens or the editing target swaps.
-  // Doing it in an effect (rather than in a useMemo on `open`) keeps the
-  // fields editable on the first paint and avoids a "stuck old value" when
-  // the parent toggles open quickly.
+  // Local mirror so we can pre-fill the form on open without losing keystrokes
+  // mid-edit. The hook handles the "reset on open / on target swap" lifecycle.
+  const [initial, setInitial] = useState<CustomStylePrompt | null>(editing);
+
   useEffect(() => {
-    if (!open) return;
-    if (editing) {
-      setForm({
-        name: editing.name,
-        prompt: editing.prompt,
-        colorTheme: editing.colorTheme,
-        iconName: editing.iconName,
-      });
-    } else {
-      setForm(DEFAULT_FORM);
-    }
-    setError(null);
+    if (open) setInitial(editing);
   }, [open, editing]);
+
+  const { form, setForm, error, submitting, isDisabled, handleSubmit } = useCustomStyleForm({
+    initial,
+    editingId: editing?.id,
+    onSaved: (saved) => {
+      showSuccess(isEditMode ? '自定义风格已更新' : '自定义风格已创建');
+      onSaved?.(saved);
+      onOpenChange(false);
+    },
+  });
+
+  // If the user closed/reopened, mirror the dialog state into the form so
+  // it doesn't keep stale text after they cancelled a half-typed entry.
+  useEffect(() => {
+    if (open) {
+      setForm(editing ? formFromStyle(editing) : DEFAULT_FORM);
+    }
+  }, [open, editing, setForm]);
 
   // Close on Escape so the modal behaves like a real dialog.
   useEffect(() => {
@@ -127,50 +85,15 @@ export function CustomStyleEditor({
     };
   }, [open]);
 
-  const nameLength = form.name.length;
-  const promptLength = form.prompt.length;
-  const validationError = useMemo<string | null>(() => {
-    if (nameLength < NAME_MIN) return '风格名称不能为空';
-    if (nameLength > NAME_MAX) return `风格名称不能超过 ${NAME_MAX} 字`;
-    if (promptLength < PROMPT_MIN) return '风格描述不能为空';
-    if (promptLength > PROMPT_MAX) return `风格描述不能超过 ${PROMPT_MAX} 字`;
-    return null;
-  }, [nameLength, promptLength]);
-  const isDisabled = submitting || Boolean(validationError);
-
   const handleClose = () => {
     if (submitting) return;
     onOpenChange(false);
   };
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleFormSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    const payload: CreateCustomStyleInput = {
-      name: form.name.trim(),
-      prompt: form.prompt.trim(),
-      colorTheme: form.colorTheme,
-      iconName: form.iconName,
-    };
-    try {
-      const saved = isEditMode && editing
-        ? await updateCustomStyle(editing.id, payload)
-        : await createCustomStyle(payload);
-      showSuccess(isEditMode ? '自定义风格已更新' : '自定义风格已创建');
-      onSaved?.(saved);
-      onOpenChange(false);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '保存失败';
-      setError(message);
-      showError(message);
-    } finally {
-      setSubmitting(false);
-    }
+    const saved = await handleSubmit();
+    if (saved && error) showError(error);
   };
 
   return (
@@ -222,115 +145,13 @@ export function CustomStyleEditor({
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5 px-6 py-5">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label htmlFor="custom-style-name" className="text-sm font-semibold text-foreground/85">
-                    名称 <span className="text-rose-500">*</span>
-                  </label>
-                  <span className={cn('text-xs', nameLength > NAME_MAX ? 'text-rose-500' : 'text-muted-foreground')}>
-                    {nameLength}/{NAME_MAX}
-                  </span>
-                </div>
-                <Input
-                  id="custom-style-name"
-                  value={form.name}
-                  onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-                  maxLength={NAME_MAX + 8}
-                  placeholder="例如：日式水彩童话"
-                  disabled={submitting}
-                  className="h-11 rounded-xl border-violet-200 bg-white/80 text-base"
-                  autoComplete="off"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label htmlFor="custom-style-prompt" className="text-sm font-semibold text-foreground/85">
-                    风格 prompt <span className="text-rose-500">*</span>
-                  </label>
-                  <span className={cn('text-xs', promptLength > PROMPT_MAX ? 'text-rose-500' : 'text-muted-foreground')}>
-                    {promptLength}/{PROMPT_MAX}
-                  </span>
-                </div>
-                <textarea
-                  id="custom-style-prompt"
-                  value={form.prompt}
-                  onChange={(event) => setForm((prev) => ({ ...prev, prompt: event.target.value }))}
-                  maxLength={PROMPT_MAX + 32}
-                  placeholder="例：日系水彩童话插画，柔和的晨光穿过薄雾，柔焦的森林小径，粉彩色调与金箔点缀，角色用细腻的水彩笔触呈现，背景留白给人想象空间。"
-                  disabled={submitting}
-                  rows={5}
-                  className={cn(
-                    'flex w-full rounded-xl border border-violet-200 bg-white/80 px-3 py-2 text-sm shadow-sm transition-colors',
-                    'placeholder:text-muted-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300',
-                    'disabled:cursor-not-allowed disabled:opacity-60'
-                  )}
-                />
-                <p className="text-xs leading-5 text-muted-foreground">
-                  这段文字会作为 AI 图像生成的画风提示，建议包含：媒介、色彩、灯光、构图和氛围。
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-foreground/85">配色</p>
-                <div className="grid grid-cols-8 gap-2">
-                  {COLOR_OPTIONS.map((color) => {
-                    const isActive = form.colorTheme === color.value;
-                    return (
-                      <button
-                        key={color.value}
-                        type="button"
-                        onClick={() => setForm((prev) => ({ ...prev, colorTheme: color.value }))}
-                        disabled={submitting}
-                        title={color.label}
-                        aria-label={color.label}
-                        aria-pressed={isActive}
-                        className={cn(
-                          'group relative aspect-square overflow-hidden rounded-xl border-2 transition',
-                          isActive ? 'border-violet-500 shadow-magic' : 'border-white/70 hover:border-violet-200'
-                        )}
-                      >
-                        <div className={cn('absolute inset-0 bg-gradient-to-br', getStyleSurface(color.value))} />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-foreground/85">图标</p>
-                <div className="grid grid-cols-5 gap-2">
-                  {ICON_OPTIONS.map((iconName) => {
-                    const isActive = form.iconName === iconName;
-                    return (
-                      <button
-                        key={iconName}
-                        type="button"
-                        onClick={() => setForm((prev) => ({ ...prev, iconName }))}
-                        disabled={submitting}
-                        aria-label={iconName}
-                        aria-pressed={isActive}
-                        className={cn(
-                          'flex aspect-square items-center justify-center rounded-xl border-2 transition',
-                          isActive
-                            ? 'border-violet-500 bg-violet-50 text-violet-700 shadow-magic'
-                            : 'border-white/70 bg-white/80 text-foreground/70 hover:border-violet-200 hover:text-violet-600'
-                        )}
-                      >
-                        {getStyleIcon(iconName)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {error && (
-                <div className="flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50/85 px-3 py-2 text-sm text-rose-600">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
+            <form onSubmit={handleFormSubmit} className="space-y-5 px-6 py-5">
+              <CustomStyleFormFields
+                form={form}
+                onChange={setForm as (next: FormState) => void}
+                disabled={submitting}
+                error={error}
+              />
 
               <div className="flex items-center justify-end gap-3 pt-2">
                 <Button

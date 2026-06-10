@@ -1,8 +1,9 @@
 'use client';
 
 import { Suspense, useCallback, useEffect, useState, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowRight, Loader2, Sparkles } from 'lucide-react';
+import { ArrowRight, Loader2, Palette, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CreationStepper } from '@/components/ui/creation-stepper';
 import { CharacterStylizer } from '@/components/ui/character-stylizer';
@@ -175,10 +176,18 @@ function StylizeContent() {
       <FadeIn>
         <section className="space-y-3 md:space-y-4">
           <CreationStepper current="stylize" characterId={characterId || undefined} storyId={storyId || undefined} />
-          <div>
-            <p className="text-sm font-medium text-rose-600">第二步</p>
-            <h1 className="mt-2 text-3xl font-bold leading-tight md:text-4xl">给主角挑一种绘本里的模样</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground md:mt-3 md:text-base md:leading-8">从皮克斯感、手绘感到更梦幻的童话画风，这一步决定整本绘本的情绪和气质。{story?.title ? ` 当前故事：${story.title}` : ''}</p>
+          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-sm font-medium text-rose-600">第二步</p>
+              <h1 className="mt-2 text-3xl font-bold leading-tight md:text-4xl">给主角挑一种绘本里的模样</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground md:mt-3 md:text-base md:leading-8">从皮克斯感、手绘感到更梦幻的童话画风，这一步决定整本绘本的情绪和气质。{story?.title ? ` 当前故事《${story.title}》` : ''}</p>
+            </div>
+            <Link
+              href="/styles"
+              className="inline-flex items-center gap-2 self-start rounded-full border border-violet-200 bg-white/80 px-4 py-2 text-sm font-medium text-violet-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-violet-50 md:self-auto"
+            >
+              <Palette className="h-4 w-4" /> 管理我的风格
+            </Link>
           </div>
         </section>
       </FadeIn>
