@@ -26,6 +26,13 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 
 ## Unreleased
 
+### 2026-06-10 15:30 +08:00 - MiniMax
+- Summary: 风格库升级为独立页面(/styles + /styles/new + /styles/[id]),跟我的作品/素材库平级;旧 modal 路径保留,跟新页面共用同一份表单
+- Changed: 8 预设画风改为画廊式只读预览,我的风格列表平铺在下方;'风格'加入 mobile 4 tab + desktop 4 tab + 抽屉
+- Files: apps/web/app/(app)/styles/page.tsx, apps/web/app/(app)/styles/new/page.tsx, apps/web/app/(app)/styles/[id]/page.tsx, apps/web/components/ui/custom-style-form.tsx, apps/web/components/ui/custom-style-editor.tsx, apps/web/components/ui/nav-bar.tsx, apps/web/app/(app)/create/stylize/page.tsx
+- Validation: npm run build --workspace=apps/web (0 error); /styles /styles/new /styles/<id> /create/stylize 全 200; API CRUD 4 步 + 8 SVG 全部 200
+- Risks/None: 旧 /create/stylize 仍保留 modal 作 inline 快速创建,避免创作流程被强制跳走
+
 ### 2026-06-10 13:55 +08:00 - MiniMax
 - Summary: 风格库扩展 4→8 + 用户自定义风格(DB + API + AI 集成)
 - Changed: 4 预设扩 8 预设(新增 watercolor/paper/comic/papercut);新增 CustomStyle 表 + User 反向关系 + 完整 CRUD(/api/styles 路由,preHandler 鉴权,沿用 character/voice 模式);AI service `stylizeCharacter` 与 `ensureCharacterCostumeForStory` 签名放宽为 `PresetStyle | CustomStylePrompt`,stylePrompts map 同步扩到 8 个预设;`buildCostumePrompt` 同步扩到 8 预设;character route `stylizeSchema` 接受 enum ∪ {prompt,id?,name?};web 端 `StyleType` 扩 8、`STYLE_OPTIONS` 扩 8、`StyleInput = StyleType | CustomStylePrompt`、`StyleSelector` 的 icons/surfaces/images map 同步扩 8、4 张新 SVG 预览图;`useCharacter.stylize` 接受 `StyleInput`;`buildCostumePrompt` 中性提示词 styleSuffix 同步扩 8。
