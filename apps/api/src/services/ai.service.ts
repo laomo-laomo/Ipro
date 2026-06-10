@@ -470,6 +470,23 @@ export interface EnsureCostumeResult {
   reason: 'cache-hit' | 'restyled' | 'fallback-after-error';
 }
 
+// Preset style keys. The web UI exposes 8 presets (4 originals + 4 added in
+// the style-library rollout), but only this enum is what the AI service
+// recognizes as a "known" preset. Custom user-defined styles go through the
+// CustomStylePrompt object form.
+export type PresetStyle = 'pixar' | 'ghibli' | 'clay' | 'handdrawn' | 'watercolor' | 'paper' | 'comic' | 'papercut';
+
+// A custom user-defined style. The AI service injects `prompt` directly as
+// the styleSuffix and skips the preset lookup. The optional `id` is a
+// CustomStyle DB row id (purely for logging/audit) — not required.
+export interface CustomStylePrompt {
+  prompt: string;
+  id?: string;
+  name?: string;
+}
+
+export type StyleInput = PresetStyle | CustomStylePrompt;
+
 /**
  * Ensure the character has a stylized photo whose costume matches the given
  * story title. Reuses the existing stylized photo when the title matches
@@ -484,7 +501,7 @@ export async function ensureCharacterCostumeForStory(
   character: { id: string; originalPhotoUrl: string; stylizedPhotoUrl: string | null; lastStylizedTitle: string | null },
   storyId: string,
   title: string | null | undefined,
-  style: 'pixar' | 'ghibli' | 'clay' | 'handdrawn' = 'pixar'
+  style: PresetStyle | CustomStylePrompt = 'pixar'
 ): Promise<EnsureCostumeResult> {
   const normalizedTitle = (title ?? '').trim();
   const cachedTitle = (character.lastStylizedTitle ?? '').trim();
@@ -535,23 +552,57 @@ export async function ensureCharacterCostumeForStory(
 
 export async function stylizeCharacter(
   photoUrl: string,
-  style: 'pixar' | 'ghibli' | 'clay' | 'handdrawn' = 'pixar',
+  style: StyleInput = 'pixar',
   title?: string
 ): Promise<string> {
-  const stylePrompts = {
+  const stylePrompts: Record<PresetStyle, string> = {
     pixar: 'Create a premium feature-animation hero portrait in a strongly recognizable Pixar-inspired 3D style: large expressive eyes, rounded appeal, polished subsurface skin shading, sculpted 3D face volumes, glossy believable materials, cinematic warm rim light, saturated but tasteful family-film color design, high-end animated-movie character turnaround energy, clean studio backdrop, vertical composition. The result must read immediately as a modern theatrical 3D animated character, not flat illustration or generic cartoon.',
     ghibli: 'Create a strongly recognizable Studio Ghibli-inspired hand-painted anime portrait: soft cel-animation linework, poetic natural color harmony, gentle painterly shading, airy whimsical atmosphere, calm storytelling expression, delicate facial features, light watercolor-and-gouache background handling, emotionally warm Japanese animated-film feeling, clean studio backdrop, vertical composition. The result must read immediately as classic hand-crafted anime cinema, not 3D render or generic cartoon.',
     clay: 'Create a strongly recognizable stop-motion clay animation portrait: obvious handmade clay texture, finger-molded surfaces, tactile plasticine materials, tiny imperfections, chunky cute silhouette, miniature set lighting, handcrafted studio stop-motion charm, soft but directional cinematic light, clean studio backdrop, vertical composition. The result must read immediately as real claymation, not smooth 3D or flat drawing.',
     handdrawn: 'Create a strongly recognizable premium hand-drawn children\'s book portrait: visible pencil linework, watercolor washes, ink-and-colored-pencil texture, paper grain, soft layered pigments, elegant illustration composition, warm editorial storybook atmosphere, handcrafted brush detail, clean studio backdrop, vertical composition. The result must read immediately as traditional illustration on paper, not 3D render or anime cel style.',
+    watercolor: 'Create a strongly recognizable premium watercolor children\'s book portrait: loose flowing watercolor pigment, soft wet-on-wet color bleeds, visible brushwork, paper grain and deckled edges, luminous translucent washes, gentle color pooling and granulation, organic pigment spreads, hand-painted layered glazes, soft editorial illustration mood, clean studio backdrop, vertical composition. The result must read immediately as authentic traditional watercolor on cold-press paper, not flat cel illustration or 3D render.',
+    paper: 'Create a strongly recognizable premium paper-craft / origami children\'s book portrait: clearly faceted low-poly paper construction, crisp folded paper edges, geometric planar surfaces, soft paper-grain texture, layered paper cutouts with subtle cast shadows, tactile handmade paper quality, gentle diffuse studio lighting, palette of warm paper tones with a few saturated accents, clean studio backdrop, vertical composition. The result must read immediately as a folded paper craft model, not flat illustration or smooth 3D render.',
+    comic: 'Create a strongly recognizable American comic-book / graphic-novel children\'s hero portrait: bold clean ink outlines of varying weight, flat saturated color fills, Ben-Day halftone dot shading, dynamic pop-art speed lines, dramatic rim light, snap composition, punchy primary and secondary palette, clean studio backdrop, vertical composition. The result must read immediately as a printed comic-book panel, not soft watercolor or 3D render.',
+    papercut: 'Create a strongly recognizable Chinese paper-cut / shadow-puppet children\'s book portrait: pure flat planar color shapes, no gradients, crisp cut-paper silhouettes, ornamental symmetrical decorative motifs (clouds, florals, auspicious patterns), warm vermillion and gold lacquer palette, bold black contour outlines, layered translucent paper depth, clean studio backdrop, vertical composition. The result must read immediately as a traditional Chinese paper-cut (剪纸) or shadow-play (皮影) artwork, not Western cartoon or 3D render.',
   };
+
+  // When the caller passes a CustomStylePrompt, treat it as the entire
+  // styleSuffix — the user's prompt fully describes the art direction.
+  // The preset map is bypassed and we still call the same apiz.ai endpoint
+  // with the same identity-preservation prefix, so the result is a custom
+  // style applied on top of the user's face. We do not run costume-profile
+  // analysis for custom styles — the prompt already encodes the world.
+  const isCustomStyle = typeof style === 'object' && style !== null && 'prompt' in style;
+  const customStyle: CustomStylePrompt | null = isCustomStyle
+    ? (style as CustomStylePrompt)
+    : null;
+  const presetKey: PresetStyle | null = isCustomStyle
+    ? null
+    : (style as PresetStyle);
 
   // Look up story costume profile for this title
   let storyPrompt = '';
-  if (title) {
+  if (customStyle) {
+    // Custom style path: ignore title-based costume profile lookup; the
+    // user's prompt is the full art direction. We still need a title-aware
+    // costume description if a profile matches, so blend them.
+    if (title) {
+      const profile = getStoryCostumeProfile(title);
+      if (profile) {
+        const costumeClause = buildCostumePrompt(profile, undefined, 'pixar');
+        storyPrompt = `${customStyle.prompt}. The character should also reflect this story's costume: ${costumeClause}`;
+      } else {
+        storyPrompt = customStyle.prompt;
+      }
+    } else {
+      storyPrompt = customStyle.prompt;
+    }
+    console.log(`[Stylize] Using custom style${customStyle.name ? ` "${customStyle.name}"` : ''} (id=${customStyle.id ?? 'n/a'})`);
+  } else if (title && presetKey) {
     const profile = getStoryCostumeProfile(title);
     if (profile) {
       // Use pre-defined costume profile (e.g. 愚公移山 → ancient Chinese farmer costume)
-      storyPrompt = buildCostumePrompt(profile, undefined, style);
+      storyPrompt = buildCostumePrompt(profile, undefined, presetKey);
       console.log(`[Stylize] Using costume profile for "${title}": ${storyPrompt.slice(0, 80)}...`);
     } else {
       // No preset profile → use LLM to analyze the story and generate costume description
@@ -563,16 +614,25 @@ export async function stylizeCharacter(
           ghibli: ' rendered in a strongly recognizable Studio Ghibli-inspired hand-painted anime look with delicate cel lines, poetic color harmony, gentle painterly shading, and whimsical cinematic warmth',
           clay: ' rendered in a strongly recognizable stop-motion claymation look with tactile plasticine texture, handmade imperfections, chunky silhouettes, and miniature studio lighting',
           handdrawn: ' rendered in a strongly recognizable traditional hand-drawn storybook illustration look with visible pencil lines, watercolor pigment, paper texture, and warm editorial charm',
-        }[style];
+          watercolor: ' rendered in a strongly recognizable premium watercolor look with flowing pigment washes, wet-on-wet bleeds, visible brushwork, paper grain, and translucent layered glazes',
+          paper: ' rendered in a strongly recognizable paper-craft origami look with faceted low-poly geometry, crisp folded paper edges, geometric planar surfaces, and tactile handmade paper quality',
+          comic: ' rendered in a strongly recognizable American comic-book look with bold ink outlines, flat saturated colors, Ben-Day halftone dots, dynamic pop-art speed lines, and a punchy primary palette',
+          papercut: ' rendered in a strongly recognizable Chinese paper-cut / shadow-puppet look with flat planar shapes, ornamental symmetrical motifs, warm vermillion-and-gold lacquer palette, and bold black contour outlines',
+        }[presetKey];
         storyPrompt = costumeDesc + styleDesc;
         console.log(`[Stylize] LLM costume analysis: ${costumeDesc.slice(0, 80)}...`);
       } else {
         // Final fallback: generic description
-        storyPrompt = stylePrompts[style] + `, dressed as a character from the children's story "${title}", fitting the story's world and costume`;
+        storyPrompt = stylePrompts[presetKey] + `, dressed as a character from the children's story "${title}", fitting the story's world and costume`;
       }
     }
+  } else if (presetKey) {
+    storyPrompt = stylePrompts[presetKey];
   } else {
-    storyPrompt = stylePrompts[style];
+    // Defensive: neither custom nor preset matched (should not happen given
+    // the StyleInput union). Fall back to pixar to keep behaviour identical
+    // to the pre-style-library default.
+    storyPrompt = stylePrompts.pixar;
   }
 
 // Determine mode: edit (image-to-image) or text-to-image

@@ -20,11 +20,37 @@ model User {
 
   characters  Character[]
   stories     Story[]
-voices      UserVoice[]
+  voices      UserVoice[]
   memberships Membership[]
   orders      Order[]
   notifications PaymentNotification[]
   redeemCodes RedeemCode[] @relation("RedeemCodeUsedBy")
+  customStyles CustomStyle[]
+}
+
+// User-defined character stylization prompts. Stores custom art-direction
+// prompts that the AI service can pass through to apiz.ai when the user
+// chooses a "Custom Style" in the style picker. Each row is owned by a single
+// user and is referenced (by id) from the web StyleLibrary UI when the user
+// clicks a custom tile.
+model CustomStyle {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Display name in the UI (1-30 chars).
+  name        String
+  // Full prompt the user wrote (1-2000 chars). Passed to apiz.ai as the
+  // styleSuffix for stylizeCharacter when this style is selected.
+  prompt      String
+  // Tailwind color-theme key (orange, sky, emerald, rose, violet, amber,
+  // cyan, lime). Drives the swatch / accent color in the StyleLibrary UI.
+  colorTheme  String   @default("violet")
+  // Lucide-react icon name for the tile.
+  iconName    String   @default("Sparkles")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model UserVoice {

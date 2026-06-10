@@ -24,6 +24,7 @@ import { voiceRoutes } from './routes/voice/index.js';
 import { orderRoutes } from './routes/order/index.js';
 import { membershipRoutes } from './routes/membership/index.js';
 import { adminRoutes } from './routes/admin/index.js';
+import { styleRoutes } from './routes/style/index.js';
 import { assetsRoutes } from './routes/assets/index.js';
 import { errorHandler } from './middlewares/error.middleware.js';
 import { authMiddleware } from './middlewares/auth.middleware.js';
@@ -107,6 +108,7 @@ async function main() {
     await protectedApp.register(voiceRoutes, { prefix: '/api/voices' });
     await protectedApp.register(orderRoutes, { prefix: '/api/orders' });
     await protectedApp.register(membershipRoutes, { prefix: '/api/membership' });
+    await protectedApp.register(styleRoutes, { prefix: '/api/styles' });
   });
 
   // Protected routes - assets

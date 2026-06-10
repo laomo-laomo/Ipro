@@ -1,7 +1,34 @@
 // Character types
 export type CharacterStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
-export type StyleType = 'pixar' | 'ghibli' | 'clay' | 'handdrawn';
+// Preset style keys recognized by the AI service. The list is extended
+// (4 → 8) in the style-library rollout; see STYLE_OPTIONS below for the
+// user-facing picker labels and preview thumbnails.
+export type StyleType =
+  | 'pixar'
+  | 'ghibli'
+  | 'clay'
+  | 'handdrawn'
+  | 'watercolor'
+  | 'paper'
+  | 'comic'
+  | 'papercut';
+
+// A user-defined custom style. Mirrors the AI service CustomStylePrompt +
+// the CustomStyle DB row shape so the StyleLibrary UI can render user
+// tiles with the same accent / icon metadata.
+export interface CustomStylePrompt {
+  prompt: string;
+  id: string;
+  name: string;
+  colorTheme: string;
+  iconName: string;
+}
+
+// Style field accepted by the API. Either a preset key (string) or a custom
+// style object loaded from the CustomStyle table. The shape matches the
+// server-side zod union exactly.
+export type StyleInput = StyleType | CustomStylePrompt;
 
 export interface Character {
   id: string;
@@ -21,7 +48,9 @@ export interface UploadCharacterResponse {
 }
 
 export interface StylizeCharacterRequest {
-  style: StyleType;
+  // Preset enum OR a custom user-defined style. The orchestrator-style
+  // shape is preserved end-to-end through the API and AI service.
+  style: StyleInput;
 }
 
 export interface StylizeCharacterResponse {
@@ -76,6 +105,30 @@ export const STYLE_OPTIONS: StyleOption[] = [
     name: '手绘风格',
     description: '细腻手绘插画，柔和温暖',
     previewImage: '/styles/handdrawn.svg',
+  },
+  {
+    id: 'watercolor',
+    name: '水彩风',
+    description: '水彩风，流动的色彩，纸面晕染',
+    previewImage: '/styles/watercolor.svg',
+  },
+  {
+    id: 'paper',
+    name: '折纸风',
+    description: '折纸风格，几何切面，低多边形质感',
+    previewImage: '/styles/paper.svg',
+  },
+  {
+    id: 'comic',
+    name: '漫画风',
+    description: '美式漫画，粗线条，网点阴影',
+    previewImage: '/styles/comic.svg',
+  },
+  {
+    id: 'papercut',
+    name: '剪纸风',
+    description: '中国剪纸/皮影风，平面色块，装饰纹样',
+    previewImage: '/styles/papercut.svg',
   },
 ];
 

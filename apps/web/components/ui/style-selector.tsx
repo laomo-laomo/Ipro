@@ -3,13 +3,17 @@
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import type { StyleType } from '@/types/character';
-import { Film, Pencil, Shapes, Sparkles } from 'lucide-react';
+import { Brush, Droplets, Film, Pencil, Shapes, Sparkles, Wand2, Zap } from 'lucide-react';
 
 const STYLE_ICONS: Record<StyleType, React.ReactNode> = {
   pixar: <Film className="h-5 w-5" />,
   ghibli: <Sparkles className="h-5 w-5" />,
   clay: <Shapes className="h-5 w-5" />,
   handdrawn: <Pencil className="h-5 w-5" />,
+  watercolor: <Droplets className="h-5 w-5" />,
+  paper: <Wand2 className="h-5 w-5" />,
+  comic: <Zap className="h-5 w-5" />,
+  papercut: <Brush className="h-5 w-5" />,
 };
 
 const STYLE_SURFACES: Record<StyleType, string> = {
@@ -17,6 +21,10 @@ const STYLE_SURFACES: Record<StyleType, string> = {
   ghibli: 'from-sky-300 via-cyan-100 to-white',
   clay: 'from-emerald-300 via-lime-100 to-white',
   handdrawn: 'from-rose-300 via-pink-100 to-white',
+  watercolor: 'from-cyan-200 via-sky-100 to-white',
+  paper: 'from-amber-200 via-yellow-50 to-white',
+  comic: 'from-yellow-200 via-amber-100 to-white',
+  papercut: 'from-rose-200 via-red-100 to-amber-50',
 };
 
 const STYLE_IMAGES: Record<StyleType, string> = {
@@ -24,6 +32,10 @@ const STYLE_IMAGES: Record<StyleType, string> = {
   ghibli: '/styles/ghibli.svg',
   clay: '/styles/clay.svg',
   handdrawn: '/styles/handdrawn.svg',
+  watercolor: '/styles/watercolor.svg',
+  paper: '/styles/paper.svg',
+  comic: '/styles/comic.svg',
+  papercut: '/styles/papercut.svg',
 };
 
 export interface StyleSelectorProps {

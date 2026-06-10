@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import type {
   Character,
+  StyleInput,
   StyleType,
   UploadProgress,
   UploadCharacterResponse,
@@ -35,7 +36,7 @@ export interface UseCharacterActions {
   loadCharacter: (characterId: string) => Promise<void>;
   loadCharacters: () => Promise<void>;
   removeCharacter: (characterId: string) => Promise<void>;
-  stylize: (style: StyleType, title?: string) => Promise<StylizeCharacterResponse | null>;
+  stylize: (style: StyleInput, title?: string) => Promise<StylizeCharacterResponse | null>;
   reset: () => void;
   resetError: () => void;
 }
@@ -159,7 +160,7 @@ export function useCharacter(): UseCharacterState & UseCharacterActions {
     }
   }, [character]);
 
-const stylize = useCallback(async (style: StyleType, title?: string): Promise<StylizeCharacterResponse | null> => {
+const stylize = useCallback(async (style: StyleInput, title?: string): Promise<StylizeCharacterResponse | null> => {
     if (!character?.id) {
       setStylizeError('没有可风格化的角色');
       return null;

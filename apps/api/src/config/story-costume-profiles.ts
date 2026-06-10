@@ -355,12 +355,12 @@ export function getStoryCostumeProfile(storyTitle: string): StoryCostumeProfile 
  * 根据妆造配置生成风格化 prompt
  * @param profile 妆造配置
  * @param roleName 可选：指定角色名，默认取第一个角色
- * @param style 艺术风格（pixar/ghibli/clay/handdrawn）
+ * @param style 艺术风格（pixar/ghibli/clay/handdrawn/watercolor/paper/comic/papercut）
  */
 export function buildCostumePrompt(
   profile: StoryCostumeProfile,
   roleName?: string,
-  style?: 'pixar' | 'ghibli' | 'clay' | 'handdrawn'
+  style?: 'pixar' | 'ghibli' | 'clay' | 'handdrawn' | 'watercolor' | 'paper' | 'comic' | 'papercut'
 ): string {
   const role = roleName
     ? profile.roles.find((r) => r.name.includes(roleName) || roleName.includes(r.name)) || profile.roles[0]
@@ -372,6 +372,10 @@ export function buildCostumePrompt(
         ghibli: ' in Studio Ghibli anime style, hand-drawn cel animation look, warm colors, whimsical charm, on clean white background, vertical portrait orientation',
         clay: ' in claymation stop-motion style, Play-Doh texture, cute chunky proportions, on pure white background, vertical portrait',
         handdrawn: ' in hand-drawn illustration style, soft pencil and watercolor textures, warm gentle tones, on clean white background, vertical portrait orientation',
+        watercolor: ' in premium watercolor style, flowing pigment washes, wet-on-wet bleeds, visible brushwork, paper grain, translucent layered glazes, on white background, vertical portrait',
+        paper: ' in origami paper-craft style, faceted low-poly geometry, crisp folded paper edges, geometric planar surfaces, tactile handmade paper quality, on white background, vertical portrait',
+        comic: ' in American comic-book style, bold ink outlines, flat saturated colors, Ben-Day halftone dots, dynamic pop-art speed lines, punchy primary palette, on white background, vertical portrait',
+        papercut: ' in Chinese paper-cut / shadow-puppet style, flat planar shapes, ornamental symmetrical motifs, warm vermillion-and-gold lacquer palette, bold black contour outlines, on white background, vertical portrait',
       }[style]
     : '';
 

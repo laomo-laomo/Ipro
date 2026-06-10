@@ -8,13 +8,36 @@ interface CharacterParams {
 }
 
 interface StylizeBody {
-  style: 'storybook' | 'ghibli' | 'watercolor';
+  // Preset enum OR a custom user-defined style. Mirrors the AI service
+  // StyleInput union so the public surface accepts both shapes.
+  style:
+    | 'pixar'
+    | 'ghibli'
+    | 'clay'
+    | 'handdrawn'
+    | 'watercolor'
+    | 'paper'
+    | 'comic'
+    | 'papercut'
+    | { prompt: string; id?: string; name?: string };
   title?: string;
 }
 
-// Validation schemas
+// Validation schemas. The `style` field accepts either one of the 8 preset
+// keys (string) or a { prompt, id?, name? } object describing a CustomStyle
+// row. When the object is passed, the AI service bypasses the preset prompt
+// map and uses the user's prompt directly as the styleSuffix.
 const stylizeSchema = z.object({
-  style: z.enum(['pixar', 'ghibli', 'clay', 'handdrawn']).default('pixar'),
+  style: z
+    .union([
+      z.enum(['pixar', 'ghibli', 'clay', 'handdrawn', 'watercolor', 'paper', 'comic', 'papercut']),
+      z.object({
+        prompt: z.string().trim().min(1, 'Prompt is required').max(2000, 'Prompt must be 1-2000 characters'),
+        id: z.string().optional(),
+        name: z.string().optional(),
+      }),
+    ])
+    .default('pixar'),
   title: z.string().max(200).optional(),
 });
 
