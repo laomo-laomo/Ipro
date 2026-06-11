@@ -534,6 +534,16 @@ export async function generateSceneIllustration(
       const failureCategory = classifyIllustrationFailure(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
+      // FAIL-FAST: every failed attempt marks the row as 'failed' and breaks out
+      // of the recovery loop. Previously the row was set to 'processing' on
+      // intermediate attempts, so if the process died mid-loop (Redis hiccup,
+      // server restart, network blip) the row would be stuck in 'processing'
+      // forever and the worker would never see a terminal status. Marking it
+      // 'failed' immediately means:
+      //   1. The worker route's catch will see a real failure and surface it.
+      //   2. The user can hit "重试" from the failed card and try again with
+      //      a fresh prompt instead of an already-polluted one.
+      //   3. Frontend never has to guess "is this thing still running?".
       await prisma.illustration.update({
         where: { id: illustration.id },
         data: {
@@ -542,7 +552,7 @@ export async function generateSceneIllustration(
           errorMessage,
           failureCategory,
           retryCount: attempt + 1,
-          status: attempt >= MAX_PROMPT_RECOVERY_RETRIES ? 'failed' : 'processing',
+          status: 'failed',
         },
       });
 
@@ -554,7 +564,7 @@ export async function generateSceneIllustration(
             ...storyboardScene.image,
             prompt: currentPrompt,
             originalPrompt,
-            status: (attempt >= MAX_PROMPT_RECOVERY_RETRIES ? 'failed' : 'processing') as StoryboardImageStatus,
+            status: 'failed' as StoryboardImageStatus,
             retryCount: attempt + 1,
             failureCategory,
             errorMessage,
@@ -568,12 +578,10 @@ export async function generateSceneIllustration(
       }).catch(() => undefined);
 
       // Emit SSE event for failed illustration
-      if (attempt >= MAX_PROMPT_RECOVERY_RETRIES) {
-        emitSceneFailed(storyId, illustration.id, sceneIndex, {
-          errorMessage,
-          failureCategory,
-        });
-      }
+      emitSceneFailed(storyId, illustration.id, sceneIndex, {
+        errorMessage,
+        failureCategory,
+      });
 
       if (failureCategory === 'policy_blocked') {
         await rememberRestrictedPrompt(currentPrompt, failureCategory);
@@ -584,7 +592,7 @@ export async function generateSceneIllustration(
       }
 
       if (attempt >= MAX_PROMPT_RECOVERY_RETRIES) {
-        // Last attempt: try LLM rewrite before giving up
+        // Last attempt: try LLM rewrite as a final rescue before giving up.
         try {
           const llmRewritten = await llmRewritePrompt(currentPrompt);
           if (llmRewritten !== currentPrompt) {
@@ -612,6 +620,7 @@ export async function generateSceneIllustration(
         throw error;
       }
 
+      // Prepare a revised prompt for the next attempt and continue the loop.
       currentPrompt = createRevisedPrompt(currentPrompt, error, attempt + 1);
     }
   }
@@ -658,6 +667,7 @@ export async function getStoryIllustrations(storyId: string, userId: string) {
         description: scene?.description || '',
         text: scene?.text || '',
         status: ill.status,
+        errorMessage: ill.errorMessage,
         failureCategory: ill.failureCategory,
         retryCount: ill.retryCount,
         hasAutoRecovery: Boolean(ill.originalPrompt && ill.prompt && ill.originalPrompt !== ill.prompt),

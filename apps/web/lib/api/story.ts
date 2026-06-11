@@ -398,6 +398,7 @@ export async function getStoryIllustrations(
       sceneDesc: illustration.description || '',
       imageUrl: resolveAssetUrl(illustration.imageUrl),
       imageStatus: mapImageStatus(illustration.status),
+      errorMessage: illustration.errorMessage ?? undefined,
     };
   });
 }

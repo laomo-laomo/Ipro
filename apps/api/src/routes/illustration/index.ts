@@ -189,43 +189,87 @@ export async function illustrationRoutes(app: FastifyInstance): Promise<void> {
             prisma.illustration.update({ where: { id: ill.id }, data: { status: 'processing' } })
           ));
 
-          // Fire and forget - generate in parallel with a small worker pool,
-          // isolating per-scene errors so one bad scene doesn't kill the rest.
-          // Concurrency cap keeps apiz.ai from rate-limiting us.
-          const CONCURRENCY = 3;
-          const generateAll = async () => {
-            let cursor = 0;
-            const worker = async () => {
-              while (cursor < illustrations.length) {
-                const ill = illustrations[cursor++];
-                try {
-                  request.log.info(`[Illustrate] Generating scene ${ill.sceneIndex} with characterId=${characterId}`);
-                  const result = await generateSceneIllustration(storyId, ill.sceneIndex, characterId);
-                  await prisma.illustration.update({
-                    where: { id: ill.id },
-                    data: { imageUrl: result.imageUrl, prompt: result.prompt, status: 'completed', cost: result.cost },
-                  });
-                  request.log.info(`[Illustrate] Scene ${ill.sceneIndex} completed`);
-                } catch (genError: any) {
-                  const message = genError instanceof Error ? genError.message : String(genError);
-                  request.log.error(`[Illustrate] Scene ${ill.sceneIndex} failed: ${message}`);
-                  // service may have left status='processing' if it threw mid-recovery;
-                  // force-mark as failed so the row never gets stuck.
-                  await prisma.illustration.update({
-                    where: { id: ill.id },
-                    data: { status: 'failed', errorMessage: message },
-                  }).catch(() => {});
-                }
-              }
-            };
-            await Promise.all(
-              Array.from({ length: Math.min(CONCURRENCY, illustrations.length) }, worker),
-            );
-            await checkAllIllustrationsCompleted(storyId).catch(() => {});
-            request.log.info(`[Illustrate] All scenes processed for story ${storyId}`);
+          // Fire and forget - generate every scene regardless of pool size.
+          // Use a small concurrency cap (2) to keep apiz.ai from rate-limiting us,
+          // but DO NOT cap the worker count below the number of pending scenes —
+          // the previous `Array.from({ length: Math.min(CONCURRENCY, N) }, worker)`
+          // pattern could under-provision workers and leave tail scenes stuck in
+          // 'processing' forever when the cursor advanced past them mid-flight.
+          // To make coverage unambiguous we run each scene through a single
+          // bounded-concurrency map. Per-scene errors are caught so a single
+          // bad scene never poisons the batch.
+          const CONCURRENCY = 2;
+          request.log.info(
+            { storyId, count: illustrations.length, concurrency: CONCURRENCY, characterId },
+            '[Illustrate] workers started'
+          );
+
+          const generateOne = async (ill: typeof illustrations[number]) => {
+            try {
+              request.log.info(`[Illustrate] Generating scene ${ill.sceneIndex} with characterId=${characterId}`);
+              const result = await generateSceneIllustration(storyId, ill.sceneIndex, characterId);
+              await prisma.illustration.update({
+                where: { id: ill.id },
+                data: { imageUrl: result.imageUrl, prompt: result.prompt, status: 'completed', cost: result.cost },
+              });
+              request.log.info(`[Illustrate] Scene ${ill.sceneIndex} completed`);
+            } catch (genError: any) {
+              const message = genError instanceof Error ? genError.message : String(genError);
+              request.log.error(`[Illustrate] Scene ${ill.sceneIndex} failed: ${message}`);
+              // service may have left status='processing' if it threw mid-recovery;
+              // force-mark as failed so the row never gets stuck.
+              await prisma.illustration.update({
+                where: { id: ill.id },
+                data: { status: 'failed', errorMessage: message },
+              }).catch(() => {});
+            }
           };
 
-          generateAll().catch(err => request.log.error(`[Illustrate] Background error: ${err.message}`));
+          const generateAll = async () => {
+            try {
+              // Bounded-concurrency map: at most CONCURRENCY scenes in flight at any
+              // moment, but every scene in `illustrations` is guaranteed a slot.
+              let cursor = 0;
+              const activeWorkers: Promise<void>[] = [];
+
+              const launchNext = (): Promise<void> | null => {
+                if (cursor >= illustrations.length) return null;
+                const ill = illustrations[cursor++];
+                const p = generateOne(ill).finally(() => {
+                  const idx = activeWorkers.indexOf(p);
+                  if (idx >= 0) activeWorkers.splice(idx, 1);
+                });
+                activeWorkers.push(p);
+                return p;
+              };
+
+              // Prime the pool.
+              for (let i = 0; i < Math.min(CONCURRENCY, illustrations.length); i++) {
+                launchNext();
+              }
+
+              // Drain: every time a worker finishes, launch the next pending scene.
+              while (activeWorkers.length > 0) {
+                await Promise.race(activeWorkers);
+                while (activeWorkers.length < CONCURRENCY) {
+                  if (launchNext() === null) break;
+                }
+              }
+
+              await checkAllIllustrationsCompleted(storyId).catch(() => {});
+              request.log.info(
+                { storyId, processed: illustrations.length, concurrency: CONCURRENCY },
+                '[Illustrate] all workers done'
+              );
+            } catch (err: any) {
+              const message = err instanceof Error ? err.message : String(err);
+              request.log.error(`[Illustrate] Background error: ${message}`);
+            }
+          };
+
+          // Truly fire-and-forget — do NOT await here, otherwise the HTTP response
+          // blocks on every illustration and the API times out.
+          void generateAll();
 
           return reply.send({
             success: true,

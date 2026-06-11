@@ -281,14 +281,27 @@ export function StyleSelector({
         const value = customStyleValue(style.id);
         const isSelected = selectedStyle === value;
 
+        // We use a <div role="button"> here (not <button>) so the card can host
+        // another interactive element (the 编辑/删除 menu) without violating
+        // the HTML rule that forbids <button> nested inside <button>. The
+        // tabIndex / onKeyDown / role pair keeps keyboard users happy.
         return (
-          <button
+          <div
             key={style.id}
-            type="button"
+            role="button"
+            tabIndex={disabled ? -1 : 0}
+            aria-pressed={isSelected}
+            aria-label={style.name}
             onClick={() => onStyleChange(value)}
-            disabled={disabled}
+            onKeyDown={(event) => {
+              if (disabled) return;
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onStyleChange(value);
+              }
+            }}
             className={cn(
-              'group relative rounded-[26px] border p-2 text-left transition-all duration-200',
+              'group relative cursor-pointer rounded-[26px] border p-2 text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400',
               isSelected ? 'border-violet-400 bg-violet-50/80 shadow-magic scale-[1.02]' : 'border-white/70 bg-white/82 hover:-translate-y-1 hover:shadow-paper',
               disabled && 'opacity-50 cursor-not-allowed'
             )}
@@ -314,7 +327,7 @@ export function StyleSelector({
                 disabled={disabled}
               />
             )}
-          </button>
+          </div>
         );
       })}
 

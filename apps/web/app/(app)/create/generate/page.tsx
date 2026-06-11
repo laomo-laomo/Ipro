@@ -359,6 +359,14 @@ function GenerateContent() {
                             ) : isFailed ? (
                               <div className="flex flex-col items-center gap-1.5">
                                 <span className="text-rose-600">生成失败</span>
+                                {segment.errorMessage && (
+                                  <p
+                                    className="line-clamp-3 max-w-full rounded bg-rose-50 px-2 py-1 text-left text-[11px] leading-snug text-rose-700 break-words"
+                                    title={segment.errorMessage}
+                                  >
+                                    {segment.errorMessage}
+                                  </p>
+                                )}
                                 <button
                                   onClick={async () => {
                                     if (illustrationLockRef.current || isIllustrating) return;

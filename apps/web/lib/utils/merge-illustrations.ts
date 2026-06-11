@@ -18,6 +18,10 @@ export function mergeIllustrations(
       ...segment,
       imageUrl: illustration.imageUrl,
       imageStatus: illustration.imageStatus,
+      // Always take the freshest errorMessage from the server. If a retry
+      // cleared the previous error (status flipped back to 'processing'/'completed'),
+      // a null here will hide the stale message from the UI.
+      errorMessage: illustration.errorMessage ?? segment.errorMessage ?? undefined,
     };
   });
 }

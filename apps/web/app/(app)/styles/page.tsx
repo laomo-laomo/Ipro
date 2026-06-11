@@ -15,6 +15,15 @@ import {
 } from '@/lib/api/style';
 import type { CustomStylePrompt } from '@/types/character';
 import { useToast } from '@/components/ui/toast';
+import { cn } from '@/lib/utils';
+
+type Tab = 'all' | 'presets' | 'mine';
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'all', label: '全部' },
+  { id: 'presets', label: '预设' },
+  { id: 'mine', label: '我的' },
+];
 
 export default function StylesIndexPage() {
   const router = useRouter();
@@ -23,6 +32,7 @@ export default function StylesIndexPage() {
   const [loading, setLoading] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<CustomStylePrompt | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [activeTab, setActiveTab] = useState<Tab>('all');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -93,47 +103,33 @@ export default function StylesIndexPage() {
       </FadeIn>
 
       <FadeIn delay={0.05}>
-        <section className="space-y-3">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-lg font-bold md:text-xl">预设画风 · 8 种</h2>
-            <span className="text-xs text-muted-foreground md:text-sm">随选随用,系统调好的 prompt 模板</span>
+        <div className="space-y-4">
+          <div className="flex items-center gap-1 rounded-full border border-violet-200/60 bg-white/60 p-1 shadow-sm backdrop-blur-sm w-fit">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  'rounded-full px-5 py-1.5 text-sm font-medium transition-all duration-200',
+                  activeTab === tab.id
+                    ? 'bg-violet-600 text-white shadow-sm'
+                    : 'text-foreground/60 hover:text-foreground hover:bg-violet-50'
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
-          <StyleSelector
-            selectedStyle=""
-            onStyleChange={() => {
-              // Preview-only on this page. Users head to /create/upload to actually
-              // pick a style for their next story.
-            }}
-            disabled
-            className="pointer-events-none opacity-90"
-          />
-        </section>
-      </FadeIn>
 
-      <FadeIn delay={0.1}>
-        <section className="space-y-3">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-lg font-bold md:text-xl">我的风格</h2>
-            <span className="text-xs text-muted-foreground md:text-sm">点击卡片可以编辑或删除</span>
-          </div>
-          {customStyles.length === 0 ? (
-            <GlassCard className="flex flex-col items-center justify-center px-5 py-12 text-center md:py-16">
-              <Palette className="h-12 w-12 text-violet-300 md:h-14 md:w-14" />
-              <h3 className="mt-4 text-xl font-bold md:text-2xl">还没有专属画风</h3>
-              <p className="mt-2 max-w-md text-sm leading-7 text-muted-foreground">
-                用一段文字描述你想要的氛围——比如「赛博朋克霓虹 + 黑灰 + 暖光轮廓」,系统会把这段描述存成你专属的风格模板。
-              </p>
-              <MagicButton href="/styles/new" size="lg" className="mt-5 px-7">
-                <Plus className="h-4 w-4" /> 立刻新建
-              </MagicButton>
-            </GlassCard>
-          ) : (
+          {activeTab === 'all' && (
             <StaggerList className="space-y-4">
               <StaggerItem>
                 <StyleSelector
                   selectedStyle=""
                   onStyleChange={() => {}}
                   customStyles={customStyles}
+                  onCreateCustom={handleCreate}
                   onEditCustom={handleEdit}
                   onDeleteCustom={(id) => {
                     const target = customStyles.find((s) => s.id === id) ?? null;
@@ -144,7 +140,52 @@ export default function StylesIndexPage() {
               </StaggerItem>
             </StaggerList>
           )}
-        </section>
+
+          {activeTab === 'presets' && (
+            <StaggerList className="space-y-4">
+              <StaggerItem>
+                <StyleSelector
+                  selectedStyle=""
+                  onStyleChange={() => {}}
+                  disabled
+                  className="pointer-events-none opacity-90"
+                />
+              </StaggerItem>
+            </StaggerList>
+          )}
+
+          {activeTab === 'mine' && (
+            customStyles.length === 0 ? (
+              <GlassCard className="flex flex-col items-center justify-center px-5 py-12 text-center md:py-16">
+                <Palette className="h-12 w-12 text-violet-300 md:h-14 md:w-14" />
+                <h3 className="mt-4 text-xl font-bold md:text-2xl">还没有专属画风</h3>
+                <p className="mt-2 max-w-md text-sm leading-7 text-muted-foreground">
+                  用一段文字描述你想要的氛围——比如「赛博朋克霓虹 + 黑灰 + 暖光轮廓」,系统会把这段描述存成你专属的风格模板。
+                </p>
+                <MagicButton href="/styles/new" size="lg" className="mt-5 px-7">
+                  <Plus className="h-4 w-4" /> 立刻新建
+                </MagicButton>
+              </GlassCard>
+            ) : (
+              <StaggerList className="space-y-4">
+                <StaggerItem>
+                  <StyleSelector
+                    selectedStyle=""
+                    onStyleChange={() => {}}
+                    customStyles={customStyles}
+                    onCreateCustom={handleCreate}
+                    onEditCustom={handleEdit}
+                    onDeleteCustom={(id) => {
+                      const target = customStyles.find((s) => s.id === id) ?? null;
+                      setPendingDelete(target);
+                    }}
+                    className="pointer-events-auto"
+                  />
+                </StaggerItem>
+              </StaggerList>
+            )
+          )}
+        </div>
       </FadeIn>
 
       <ConfirmDialog

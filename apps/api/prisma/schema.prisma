@@ -170,14 +170,20 @@ model Video {
   charCount   Int      @default(0)
   cost        Float    @default(0)
   status      String   @default("pending") // pending, processing, completed, failed
+  // Live progress (persisted so polling can recover when SSE dies / API restarts)
+  progress    Int      @default(0)        // 0-100
+  stage       String?                      // idle | audio_generating | audio_done | rendering | video_done | completed
+  message     String?                      // optional human-readable status note
+  errorMessage String?                     // populated when status=failed
   // Metadata after completion
   duration    Float?   // Duration in seconds
   resolution  String?  // e.g., "1920x1080"
-  fileSize    Int?     // File size in bytes
-  renderer    String   @default("ffmpeg") // ffmpeg | remotion
+  fileSize    Int?    // File size in bytes
+  renderer    String  @default("ffmpeg") // ffmpeg | remotion
   createdAt   DateTime @default(now())
 
   @@index([storyId])
+  @@index([status])
 }
 
 model Membership {

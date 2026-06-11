@@ -13,6 +13,7 @@ import {
   markVideoFailed,
   markVideoCompleted,
   updateVideoAudioUrl,
+  updateVideoProgress,
 } from '../services/video.service.js';
 import {
   emitAudioGenerating,
@@ -54,6 +55,7 @@ export async function processVideoJobInline(
   const { videoId, storyId, audioType, voiceId, voiceName } = data;
   try {
     await markVideoProcessing(videoId);
+    await updateVideoProgress(videoId, { progress: 10, stage: 'audio_generating', message: '正在合成故事配音' });
     await hooks.onProgress?.(10);
     emitAudioGenerating(videoId);
 
@@ -63,17 +65,21 @@ export async function processVideoJobInline(
       voiceName,
     });
     await updateVideoAudioUrl(videoId, audioResult.audioUrl);
+    await updateVideoProgress(videoId, { progress: 40, stage: 'audio_done', message: '音频已就绪' });
     await hooks.onProgress?.(40);
     emitAudioDone(videoId, audioResult.audioUrl);
 
+    await updateVideoProgress(videoId, { progress: 50, stage: 'rendering', message: '正在渲染视频' });
     await hooks.onProgress?.(50);
     emitRendering(videoId);
 
     const videoResult = await renderVideo(videoId, storyId);
+    await updateVideoProgress(videoId, { progress: 90, stage: 'video_done', message: '视频生成完毕' });
     await hooks.onProgress?.(90);
     emitVideoDone(videoId, videoResult.videoUrl);
 
     await markVideoCompleted(videoId, videoResult.videoUrl, videoResult.metadata);
+    await updateVideoProgress(videoId, { progress: 100, stage: 'completed', message: '已完成' });
     await hooks.onProgress?.(100);
     emitVideoCompleted(videoId, {
       videoUrl: videoResult.videoUrl,

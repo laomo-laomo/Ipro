@@ -647,3 +647,28 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 
 
 
+
+### 2026-06-11 15:25 +08:00 - Codex
+- Summary: 修 illustration 跑批 3 个根因(worker pool 丢尾 + recovery 永远 processing + 前端 errorMessage 可见) + video 跑批 UI 卡 58% 兜底(polling + 后端 /video-jobs 端点) + 加 /api/health + /health 页 + smoke.ps1 + dev-clean.ps1
+- Changed:
+  - apps/api/src/routes/illustration/index.ts: worker pool 改为 bounded-concurrency map,每条 illustration 保证有 slot
+  - apps/api/src/services/illustration.service.ts: 失败强制 status='failed' 而非 'processing',getStoryIllustrations 加 errorMessage 字段
+  - apps/api/src/services/video.service.ts: 持久化 progress/stage/message/errorMessage 到 Video 表
+  - apps/api/src/jobs/video.job.ts: 写 progress 到 DB
+  - apps/api/src/routes/video/index.ts: 新增 GET /api/stories/:id/video-jobs 端点
+  - apps/api/prisma/schema.prisma: Video 表加 progress/stage/message/errorMessage 字段 + status 索引
+  - apps/api/src/routes/health/index.ts: 新文件,6 个子系统健康检查(1s timeout,健康/降级/异常)
+  - apps/api/src/index.ts: mount /api/health
+  - apps/web/app/health/page.tsx: 新文件,6 个子系统可视化(每 5s 刷新)
+  - apps/web/app/(app)/create/generate/page.tsx: 渲染 ill.errorMessage
+  - apps/web/lib/utils/merge-illustrations.ts: errorMessage 透传
+  - apps/web/lib/api/story.ts: 类型同步
+  - apps/web/app/layout.tsx: suppressHydrationWarning
+  - apps/web/app/(app)/styles/page.tsx: UI 增强
+  - apps/web/components/ui/style-selector.tsx: UI 增强
+  - scripts/smoke.ps1: 新文件,4 端点冒烟(web / + layout.css, api /me + /health)
+  - scripts/dev-clean.ps1: 新文件,杀进程 + 清 .next + 启服务 + 等 30s + 跑 smoke
+- Files: 13 M + 5 new
+- Validation: api build 0 error, web build 0 error, smoke.ps1 SMOKE TEST PASSED
+- Risks/Next: dev:web dev:api 重启后 .next 需清;Redis /apiz live ping 暂未测,后续按需
+

@@ -656,20 +656,7 @@ export async function getVideoDetails(storyId: string, userId: string) {
 
   return {
     storyId,
-    video: {
-      id: video.id,
-      videoUrl: video.videoUrl,
-      audioUrl: video.audioUrl,
-      audioType: video.audioType,
-      voiceId: video.voiceId,
-      charCount: video.charCount,
-      cost: video.cost,
-      status: video.status,
-      duration: video.duration,
-      resolution: video.resolution,
-      fileSize: video.fileSize,
-      createdAt: video.createdAt,
-    },
+    video: shapeVideo(video),
   };
 }
 
@@ -692,20 +679,102 @@ export async function getStoryVideos(storyId: string, userId: string) {
 
   return {
     storyId,
-    videos: story.videos.map(v => ({
-      id: v.id,
-      videoUrl: v.videoUrl,
-      audioUrl: v.audioUrl,
-      audioType: v.audioType,
-      voiceId: v.voiceId,
-      charCount: v.charCount,
-      cost: v.cost,
-      status: v.status,
-      duration: v.duration,
-      resolution: v.resolution,
-      fileSize: v.fileSize,
-      createdAt: v.createdAt,
-    })),
+    videos: story.videos.map(shapeVideo),
+  };
+}
+
+/**
+ * Lightweight DB-backed snapshot of all video "jobs" (rows) for a story.
+ *
+ * The frontend uses this as the polling fallback when the SSE stream
+ * (keyed by videoId) dies after a dev:api restart, browser tab
+ * backgrounding, or any other EventEmitter disconnect. Because the data
+ * is read straight from Prisma, the caller always sees the latest
+ * persisted progress even if no in-process emitter subscribers are alive.
+ */
+export async function getVideoJobsSnapshot(storyId: string, userId: string) {
+  const story = await prisma.story.findFirst({
+    where: { id: storyId, userId },
+    include: {
+      videos: {
+        orderBy: { createdAt: 'desc' },
+      },
+    },
+  });
+
+  if (!story) {
+    throw new Error('Story not found');
+  }
+
+  const jobs = story.videos.map((v) => {
+    const shaped = shapeVideo(v);
+    // Provide both videoId (the DB primary key) and jobId (null in dev
+    // because we run inline; the production Bull jobId stays opaque).
+    return {
+      ...shaped,
+      jobId: null as string | null,
+    };
+  });
+
+  // Derive a coarse phase label the frontend can map to the existing
+  // STAGES UI (idle/audio_generating/audio_done/rendering/video_done/completed).
+  const active = jobs.find((j) => j.status === 'pending' || j.status === 'processing');
+  const latest = jobs[0] ?? null;
+
+  return {
+    storyId,
+    jobs,
+    activeVideoId: active?.id ?? null,
+    // Convenience aggregate so the client can fall back to a single
+    // progress number without iterating.
+    progress: latest?.progress ?? 0,
+    stage: latest?.stage ?? null,
+    status: latest?.status ?? 'pending',
+    videoUrl: latest?.videoUrl ?? null,
+    message: latest?.message ?? null,
+    errorMessage: latest?.errorMessage ?? null,
+  };
+}
+
+/**
+ * Shape a Prisma Video row into the public API response object.
+ * Centralized so every video endpoint exposes the same field set.
+ */
+function shapeVideo(v: {
+  id: string;
+  videoUrl: string | null;
+  audioUrl: string | null;
+  audioType: string;
+  voiceId: string | null;
+  charCount: number;
+  cost: number;
+  status: string;
+  duration: number | null;
+  resolution: string | null;
+  fileSize: number | null;
+  createdAt: Date;
+  progress?: number;
+  stage?: string | null;
+  message?: string | null;
+  errorMessage?: string | null;
+}) {
+  return {
+    id: v.id,
+    videoUrl: v.videoUrl,
+    audioUrl: v.audioUrl,
+    audioType: v.audioType,
+    voiceId: v.voiceId,
+    charCount: v.charCount,
+    cost: v.cost,
+    status: v.status,
+    progress: typeof v.progress === 'number' ? v.progress : 0,
+    stage: v.stage ?? null,
+    message: v.message ?? null,
+    errorMessage: v.errorMessage ?? null,
+    duration: v.duration,
+    resolution: v.resolution,
+    fileSize: v.fileSize,
+    createdAt: v.createdAt,
   };
 }
 
@@ -715,7 +784,26 @@ export async function getStoryVideos(storyId: string, userId: string) {
 export async function markVideoProcessing(videoId: string): Promise<void> {
   await prisma.video.update({
     where: { id: videoId },
-    data: { status: 'processing' },
+    data: { status: 'processing', progress: 10, stage: 'audio_generating' },
+  });
+}
+
+/**
+ * Update live progress. Persists progress + stage so the frontend polling
+ * fallback can recover state when the SSE EventEmitter dies (e.g. dev:api
+ * restart, browser tab backgrounded).
+ */
+export async function updateVideoProgress(
+  videoId: string,
+  data: { progress: number; stage?: string; message?: string }
+): Promise<void> {
+  await prisma.video.update({
+    where: { id: videoId },
+    data: {
+      progress: data.progress,
+      stage: data.stage ?? null,
+      message: data.message ?? null,
+    },
   });
 }
 
@@ -725,7 +813,7 @@ export async function markVideoProcessing(videoId: string): Promise<void> {
 export async function markVideoFailed(videoId: string, error: string): Promise<void> {
   await prisma.video.update({
     where: { id: videoId },
-    data: { status: 'failed' },
+    data: { status: 'failed', errorMessage: error },
   });
 
   console.error(`[Video] Failed ${videoId}: ${error}`);
@@ -744,6 +832,8 @@ export async function markVideoCompleted(
     data: {
       status: 'completed',
       videoUrl,
+      progress: 100,
+      stage: 'completed',
       duration: metadata?.duration,
       resolution: metadata?.resolution,
       fileSize: metadata?.fileSize,
@@ -808,6 +898,7 @@ export default {
   getVideoDetails,
   getStoryVideos,
   markVideoProcessing,
+  updateVideoProgress,
   markVideoFailed,
   markVideoCompleted,
   updateVideoAudioUrl,

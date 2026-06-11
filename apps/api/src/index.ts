@@ -26,6 +26,7 @@ import { membershipRoutes } from './routes/membership/index.js';
 import { adminRoutes } from './routes/admin/index.js';
 import { styleRoutes } from './routes/style/index.js';
 import { assetsRoutes } from './routes/assets/index.js';
+import { healthRoutes } from './routes/health/index.js';
 import { errorHandler } from './middlewares/error.middleware.js';
 import { authMiddleware } from './middlewares/auth.middleware.js';
 import { initializeWorkers, shutdownWorkers } from './jobs/index.js';
@@ -89,6 +90,9 @@ async function main() {
   app.get('/health', async () => {
     return { status: 'ok', timestamp: new Date().toISOString() };
   });
+
+  // Detailed subsystem health (no auth) — mounted under /api/health
+  await app.register(healthRoutes, { prefix: '/api/health' });
 
   // Public routes
   await app.register(authRoutes, { prefix: '/api/auth' });
