@@ -73,3 +73,26 @@ Thumbs.db
 .mavis/
 .opencode/
 .qwen/
+
+# Dev runtime logs
+*.log
+!.gitkeep
+.tmp-*.log
+.tmp-*.err.log
+.tmp-*.out.log
+# Workspace scratch / debug
+_*.json
+_*.ts
+_*.js
+diag-*.json
+diag-*.txt
+diag-*.png
+home-*.png
+home-*.json
+styles-*.png
+styles-*.json
+styles-*.txt
+scratch-*.json
+# Test artifacts
+test_output.pdf
+.tmp-write-test.txt

@@ -26,6 +26,20 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 
 ## Unreleased
 
+### 2026-06-11 22:24 +08:00 - Codex
+- Summary: dev 环境清理(杀 8 个僵尸 node 进程 + 清 .next + 清 84 个根目录垃圾 + 扩 .gitignore)
+- Changed: .gitignore 末尾追加 dev runtime logs / workspace scratch / test artifacts 三段忽略规则,不动现有 node_modules/.next/dist 规则;清掉 8 个 IPro 残留 node 进程(PID 9812/25972/32408/41420/44140/55736/58428/59388)释放 3000/3001;删除 26 个根目录调试脚本 (find-corrupted.js/ts, find-user.js, fix-stories.js, list-chars.js, check_api.py, check_pdf.cjs, check_story_tmp.js, check_story.py, parse_pdf.cjs, patch_story.py, find.txt, fu.txt, tabs.txt, devnull, home.png, navigate.json, vid.json, vid2.json, vid3.json, cstcloud-mcp.json, decision.json, test_output.pdf, .tmp-write-test.txt, ill-route-backup.ts);删除 48 个 .tmp-* 临时日志 + .tmp-current-story.pdf;删除 7 个旧启动日志 (dev-web.log, dev-api.log, next-dev.log, web-stdout.log, web-stderr.log, api-stdout.log, api-stderr.log);删除 apps/web/.next 和 apps/api/dist 构建缓存
+- Files: .gitignore, (deleted) find-corrupted.js, find-corrupted.ts, find-user.js, find.txt, fu.txt, tabs.txt, devnull, home.png, list-chars.js, fix-stories.js, check_api.py, check_pdf.cjs, check_story_tmp.js, check_story.py, parse_pdf.cjs, patch_story.py, test_output.pdf, navigate.json, vid.json, vid2.json, vid3.json, cstcloud-mcp.json, decision.json, .tmp-write-test.txt, ill-route-backup.ts, dev-web.log, dev-api.log, next-dev.log, web-stdout.log, web-stderr.log, api-stdout.log, api-stderr.log, 48x .tmp-*.{err,out}.log, .tmp-current-story.pdf, .tmp-test-story.json, .tmp-test-templates.json, apps/web/.next/, apps/api/dist/
+- Validation: dev:web GET / → 200, GET /_next/static/css/app/layout.css → 200, dev:api GET /api/auth/me → 200 (returns dev user JSON);清理后再启动端口 3000/3001 干净无残留
+- Risks/Next: 下次跑 plan 验证 worker 不再受脏环境干扰;`plan-run.log` 因不在显式 kill 清单暂保留
+
+### 2026-06-11 22:25 +08:00 - Codex
+- Summary: 修 illustration 跑批 3 个根因(worker pool 收尾 + recovery 强制 failed + 前端 errorMessage 可见)
+- Changed: routes/illustration/index.ts (worker pool 改成"并发 2 但每条都跑"模式 + structured start/done log + fire-and-forget 释放 HTTP); services/illustration.service.ts (recovery 失败立刻 status='failed' + emitSceneFailed,顺带修一个潜伏的 storyboard status 拼写 typo MAXCOVERY_RETRIES_PLACEHOLDER → MAX_PROMPT_RECOVERY_RETRIES); getStoryIllustrations 透传 errorMessage;web lib/api/story.ts + lib/utils/merge-illustrations.ts 把 errorMessage 接入 StorySegment;create/generate/page.tsx 失败卡片显示真实 error(带 line-clamp-3 截断 + title 完整)
+- Files: apps/api/src/routes/illustration/index.ts, apps/api/src/services/illustration.service.ts, apps/web/lib/api/story.ts, apps/web/lib/utils/merge-illustrations.ts, apps/web/app/(app)/create/generate/page.tsx
+- Validation: 7/7 scene 全 completed,不再有 prompt=null 残留,scene 0 失败时前端显示真实 error;npm run build 全过(API + Web 均 0 error)
+- Risks/Next: 测试 1 个新故事 happy path(后续手测)
+
 ### 2026-06-10 15:30 +08:00 - MiniMax
 - Summary: 风格库升级为独立页面(/styles + /styles/new + /styles/[id]),跟我的作品/素材库平级;旧 modal 路径保留,跟新页面共用同一份表单
 - Changed: 8 预设画风改为画廊式只读预览,我的风格列表平铺在下方;'风格'加入 mobile 4 tab + desktop 4 tab + 抽屉
