@@ -29,6 +29,7 @@ import { assetsRoutes } from './routes/assets/index.js';
 import { healthRoutes } from './routes/health/index.js';
 import { errorHandler } from './middlewares/error.middleware.js';
 import { authMiddleware } from './middlewares/auth.middleware.js';
+import { adminMiddleware } from './middlewares/admin.middleware.js';
 import { initializeWorkers, shutdownWorkers } from './jobs/index.js';
 import { startOrderCleanupScheduler, stopOrderCleanupScheduler } from './services/payment.service.js';
 import { initRemotionHealthCheck } from './services/video.service.js';
@@ -126,6 +127,12 @@ async function main() {
   // every admin call returns 401.
   await app.register(async (adminApp) => {
     adminApp.addHook('preHandler', app.authenticate);
+    // Require role==='admin' for every /api/admin/* route. Without this any
+    // authenticated user (including the dev auto-login user) could call
+    // admin-only mutations (disable redeem codes, edit prices, manage users).
+    // Dev auto-login users still pass because their role is "admin" by
+    // configuration; non-admin users get 403.
+    adminApp.addHook('preHandler', adminMiddleware);
     await adminApp.register(adminRoutes, { prefix: '/api/admin' });
   });
 

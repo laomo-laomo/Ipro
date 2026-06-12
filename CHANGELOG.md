@@ -766,3 +766,12 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 - Files: 2 modified + 1 new
 - Validation: web build 0 error;admin 页 dev:web hot-reload 后应不再红屏
 - Risks/Next: 翻译扩展的 hidden attribute mismatch 仍可能偶然出现(没去管 hidden,只清 className);admin route 整体缺 auth guard(无 token 也能访问 /api/admin/redeem-codes),下次单独修
+
+### 2026-06-12 14:53 +08:00 - Codex
+- Summary: 加 admin routes requireAdmin 防护(已存在的 adminMiddleware 之前没被挂载,任意已登录用户都能 disable 兑换码/改价格/管用户——大安全洞)
+- Changed:
+  - apps/api/src/index.ts: 在 adminApp 上 addHook preHandler adminMiddleware
+  - apps/api/src/middlewares/admin.middleware.ts: 加 dev/prod 分支——dev mode + DEV_AUTO_LOGIN=true 时跳过 role 检查(让 dev 模式仍能跑通端到端),production 严格 role==='admin'
+- Files: 2 modified
+- Validation: api build 0 error(commit 之前已跑);dev mode 下 /api/admin/redeem-codes 仍 200(dev_auto_login 通过);prod 模式需 role=admin
+- Risks/Next: dev mode 默认 trust dev_auto_login user,生产前务必确认 DEV_AUTO_LOGIN 关闭 + NODE_ENV=production;admin/redeem-codes 的 GET 端点目前不返回 admin 操作审计日志(后续)

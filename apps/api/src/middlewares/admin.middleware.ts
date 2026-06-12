@@ -2,13 +2,15 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 
 /**
  * Admin role check middleware
- * Verifies the authenticated user has admin role
+ * Verifies the authenticated user has admin role.
+ *
+ * Every environment requires an explicit role==='admin' on the JWT-resolved user.
  */
 export async function adminMiddleware(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
-  const user = request.user;
+  const user = (request as any).user;
 
   if (!user) {
     return reply.status(401).send({
