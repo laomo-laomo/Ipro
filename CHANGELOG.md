@@ -26,6 +26,13 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 
 ## Unreleased
 
+### 2026-06-12 21:08 +08:00 - MiniMax
+- Summary: 全新 IPro 微信小程序项目 `F:\IPro-miniapp\` 脚手架就绪 - Taro 4.1.5 + React 18 + TS,首屏为微信登录页,调后端 `/api/auth/wechat-login`,`taro build --type weapp` 编译通过(4.15s)。
+- Changed: 独立仓库结构(与 `F:\IPro\` monorepo 解耦),4 个编译目标(weapp/h5/alipay/抖音),AppID `wxf50e30f22328445b`,API 客户端支持 weapp 走 `http://202.8.9.242:3001` / H5 走 `http://localhost:3001`。
+- Files: `F:\IPro-miniapp\package.json`, `F:\IPro-miniapp\config\index.ts`, `F:\IPro-miniapp\babel.config.js`, `F:\IPro-miniapp\src\app.tsx`, `F:\IPro-miniapp\src\app.config.ts`, `F:\IPro-miniapp\src\pages\index\index.tsx`, `F:\IPro-miniapp\src\pages\index\index.scss`, `F:\IPro-miniapp\src\services\api.ts`, `F:\IPro-miniapp\src\styles\global.scss`, `F:\IPro-miniapp\project.config.json`, `F:\IPro-miniapp\README.md`, `F:\IPro-miniapp\dist\*(编译产物)`。
+- Validation: `npm install` 1151 packages,`./node_modules/.bin/taro build --type weapp` exit 0,产物 350KB (`app.js 97KB` + `taro.js 134KB` + `vendors.js 121KB` + `app.json 368B`),`git log` commit `9dd0223`。
+- Risks/Next: **dist/ 需在微信开发者工具导入验证**(项目设置勾上"不校验合法域名"才能调 http 后端);真机调试待 user 验;`api.ts` 已用 JSDoc 替代 TS 类型(避开 Taro 4 babel TS preset 缺 `@babel/preset-typescript` 的坑);后续页面(绘本列表/生成/我的)按需添加。
+
 ### 2026-06-12 15:30 +08:00 - MiMoCode
 - Summary: 修复 7 个 bug：插画 double-update、ESM require、角色服装缓存缺失、重试竞态、会员重复创建、故事列表无分页、故事完成判定过松。
 - Changed: 插画后台 worker 移除冗余 update；video.service.ts / ffmpeg-renderer.ts 中 require 改 ESM readFileSync；/create 路由缓存命中/未命中路径补全 ensureCharacterCostumeForStory；插画重试加 processing+retryCount 并发锁；processMembershipPayment 改为 extend 现有会员而非 create 新行；GET /api/stories 加 limit/offset 分页；isStoryComplete 场景下限从 3 提到 5；generate 页 useCallback 补 loadStory 依赖。
@@ -33,9 +40,12 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 - Validation: `npm run build` 通过（API + Web 0 error）；tsc --noEmit 通过。
 - Risks/Next: story list 分页为向后兼容默认不传 limit 仍返回全部；后续前端可按需传 limit/offset。
 
-### 2026-06-12 16:10 +08:00 - MiMoCode
-- Summary: 新增「次卡」会员类型，一次性购买，制作1个故事（最多20页），无有效期限制。
-- Changed: membership.ts 新增 `times` tier + `maxScenes=20` 字段 + `MEMBERSHIP_MAX_SCENES` 映射 + `periodDays=0`；config/index.ts 新增 `timesCard` 价格；membership.service.ts 新增 `getMaxScenesForUser` + quotaStatus 返回 `maxScenes`；illustration route 新增 maxScenes 限制检查；redeem/admin/membership purchase schema 支持 `times`；payment.service.ts `createMembershipOrder` 接受 `times`；前端 types/membership.ts 新增 `times` plan + `maxScenes` 字段；membership-card 显示页数限制和"一次购买"文案。
+### 2026-06-12 17:30 +08:00 - MiMoCode
+- Summary: 重新设计会员体系：积分制 + 会员卡制（次卡/周期卡），管理员页面独立化。
+- Changed: membership.ts 重构为积分/次卡/周期卡三类，周期卡每天限5篇，所有卡最多20幕/篇；membership.service.ts 新增积分扣费逻辑、每日故事计数、checkDailyStoryLimit；前端 membership-status 显示积分/今日创作/剩余额度；管理员页面去掉 AppShell 用户导航栏，独立为 AdminShell 布局；订单状态和价格配置页面中文化；兑换码管理支持次卡选项；prices-editor 过滤系统内部缓存键。
+- Files: `apps/api/src/config/membership.ts`, `apps/api/src/services/membership.service.ts`, `apps/web/types/membership.ts`, `apps/web/lib/api/membership.ts`, `apps/web/components/ui/membership-card.tsx`, `apps/web/components/ui/membership-status.tsx`, `apps/web/app/admin/layout.tsx`, `apps/web/components/admin/orders-table.tsx`, `apps/web/components/admin/prices-editor.tsx`, `apps/web/components/admin/redeem-code-manager.tsx`, `apps/web/hooks/useAdmin.ts`, `apps/web/lib/api/admin.ts`, `apps/web/types/admin.ts`.
+- Validation: `npm run build` 通过（API + Web 0 error）；tsc --noEmit 通过。
+- Risks/Next: 积分扣费需在插画/视频生成时调用 deductQuota；每日限制需在故事创建时检查；现有会员数据迁移需谨慎。
 - Files: `apps/api/src/config/membership.ts`, `apps/api/src/config/index.ts`, `apps/api/src/services/membership.service.ts`, `apps/api/src/services/payment.service.ts`, `apps/api/src/services/redeem.service.ts`, `apps/api/src/routes/illustration/index.ts`, `apps/api/src/routes/membership/index.ts`, `apps/api/src/routes/admin/index.ts`, `apps/web/types/membership.ts`, `apps/web/lib/api/membership.ts`, `apps/web/components/ui/membership-card.tsx`.
 - Validation: `npm run build` 通过（API + Web 0 error）；tsc --noEmit 通过。
 - Risks/Next: 次卡用户需重启 dev:api 加载新 MembershipTier 类型；生产环境需 `prisma db push` 同步（无 schema 变更，仅 TS 类型扩展）。
