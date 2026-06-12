@@ -26,6 +26,69 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 
 ## Unreleased
 
+### 2026-06-11 18:29 +08:00 - Codex
+- Summary: 将兑换码管理页状态和类型文案改为中文。
+- Changed: 兑换码筛选下拉、历史表格状态/类型/会员档位显示从英文枚举改为中文标签。
+- Files: `apps/web/components/admin/redeem-code-manager.tsx`, `CHANGELOG.md`.
+- Validation: `npm run build --workspace=apps/web`.
+- Risks/Next: CSV 导出字段名仍保留英文,便于后续系统导入或表格处理。
+
+### 2026-06-11 18:24 +08:00 - Codex
+- Summary: 兑换码批量生成结果增加批次时间戳和表格导出。
+- Changed: 管理端创建兑换码接口返回 `batchTimestamp`、备注、奖励、过期时间等批次元数据;最新生成结果显示批次时间戳并可导出 CSV,文件名使用“备注-时间戳”。
+- Files: `apps/api/src/routes/admin/index.ts`, `apps/web/types/admin.ts`, `apps/web/components/admin/redeem-code-manager.tsx`, `CHANGELOG.md`.
+- Validation: `npm run build --workspace=apps/api`; `npm run build --workspace=apps/web`; POST `/api/admin/redeem-codes` 返回批次元数据。
+- Risks/Next: 导出格式为 CSV,Excel/WPS 可直接打开;如需原生 `.xlsx`,后续可接入 xlsx 库。
+
+### 2026-06-11 18:13 +08:00 - Codex
+- Summary: 修复管理员生成带过期时间兑换码时报 Validation error 的问题。
+- Changed: 前端将 `datetime-local` 过期时间转为 ISO 字符串再提交;后端兑换码创建 schema 放宽为任意可解析日期时间字符串。
+- Files: `apps/web/components/admin/redeem-code-manager.tsx`, `apps/api/src/routes/admin/index.ts`, `CHANGELOG.md`.
+- Validation: `npm run build --workspace=apps/api`; `npm run build --workspace=apps/web`; POST `/api/admin/redeem-codes` with ISO `expiresAt` returned success.
+- Risks/Next: None.
+
+### 2026-06-11 17:24 +08:00 - Codex
+- Summary: 将会员页优化为兑换码开通主流程并新增兑换码使用说明。
+- Changed: `/membership` 移除直接支付套餐入口,主按钮跳转兑换区,兑换卡片突出销售发码流程并显示三步说明;新增管理员/销售/用户兑换码操作文档。
+- Files: `apps/web/app/(app)/membership/page.tsx`, `docs/redeem-code-usage.md`, `CHANGELOG.md`.
+- Validation: `npm run build --workspace=apps/web`.
+- Risks/Next: 仍需创建正式 admin 账号并在生产库生成销售用兑换码。
+
+### 2026-06-11 17:12 +08:00 - Codex
+- Summary: 正式关联微信小程序登录配置并添加联调说明。
+- Changed: 本地 `.env` 写入小程序 AppID 与 `WECHAT_LOGIN_TYPE=miniapp`,保留 `WECHAT_APP_SECRET` 空位由本机私下填写;新增小程序 `wx.login` 到 `/api/auth/wechat-login` 的联调文档。
+- Files: `.env`, `docs/wechat-miniapp-login.md`, `CHANGELOG.md`.
+- Validation: `npm run build --workspace=apps/api`; `Select-String` 检查微信登录变量(未输出 secret)。
+- Risks/Next: 真实 AppSecret 仍需在 `.env` 本机填写并重启 API;真机/正式小程序需要配置合法 HTTPS request 域名。
+
+### 2026-06-11 17:07 +08:00 - Codex
+- Summary: 增加微信小程序一键登录 code2Session 支持,方便用已通过的小程序 AppID/AppSecret 联调。
+- Changed: 微信登录服务优先调用小程序 `jscode2session`,保留公众号 OAuth 兜底并支持 `WECHAT_LOGIN_TYPE`;`.env.example` 单独列出小程序登录所需变量。
+- Files: `apps/api/src/services/auth.service.ts`, `.env.example`, `CHANGELOG.md`.
+- Validation: `npm run build --workspace=apps/api`.
+- Risks/Next: 前端 Web 按钮仍只能模拟或走公众号 OAuth;真实小程序一键登录需要在微信开发者工具/小程序端调用 `wx.login` 后把 code 发到 `/api/auth/wechat-login`。
+
+### 2026-06-11 16:56 +08:00 - Codex
+- Summary: 修复未登录访问“我的作品”时底部误显示加载失败的问题。
+- Changed: Gallery 页面等待认证状态,未登录时显示登录引导而不是请求受保护列表;useGallery 支持关闭自动加载;故事列表 API 对 401 返回明确登录提示;后端 `/api/auth/me` 的 dev 自动登录行为与受保护接口统一为仅 `DEV_AUTO_LOGIN=true` 时启用。
+- Files: `apps/web/app/(app)/gallery/page.tsx`, `apps/web/hooks/useGallery.ts`, `apps/web/lib/api/story.ts`, `apps/api/src/routes/auth/index.ts`, `CHANGELOG.md`.
+- Validation: `npm run build --workspace=apps/web`; `npm run build --workspace=apps/api`.
+- Risks/Next: None.
+
+### 2026-06-11 16:33 +08:00 - Codex
+- Summary: 增加清理/删除安全规范,避免后续 agent 误删或忽略有价值文件。
+- Changed: AGENTS.md 新增 Cleanup/Delete Safety 章节,要求清理前区分 tracked/untracked/ignored、避免批量删除根目录诊断资产、清理后复核 ignored 状态;移除 `.gitignore` 中会隐藏已恢复 `test_output.pdf` 的规则。
+- Files: `AGENTS.md`, `.gitignore`, `CHANGELOG.md`.
+- Validation: `git status --short --ignored test_output.pdf`; `git diff -- AGENTS.md .gitignore CHANGELOG.md`.
+- Risks/Next: None.
+
+### 2026-06-11 16:28 +08:00 - Codex
+- Summary: 恢复上一轮 dev 清理提交中误删的已跟踪诊断/测试文件。
+- Changed: 从 `636738c^` 还原 9 个被删除的根目录文件,未恢复未跟踪的本地临时文件和构建缓存。
+- Files: `check_pdf.cjs`, `find.txt`, `fu.txt`, `parse_pdf.cjs`, `tabs.txt`, `test_output.pdf`, `vid.json`, `vid2.json`, `vid3.json`, `CHANGELOG.md`.
+- Validation: `git restore --source=636738c^ -- check_pdf.cjs find.txt fu.txt parse_pdf.cjs tabs.txt test_output.pdf vid.json vid2.json vid3.json`; `git status --short`.
+- Risks/Next: CHANGELOG 记录中提到但从未纳入 git 的根目录临时脚本/日志/构建缓存无法从仓库历史恢复;如需要可从备份或其他机器找回。
+
 ### 2026-06-11 22:24 +08:00 - Codex
 - Summary: dev 环境清理(杀 8 个僵尸 node 进程 + 清 .next + 清 84 个根目录垃圾 + 扩 .gitignore)
 - Changed: .gitignore 末尾追加 dev runtime logs / workspace scratch / test artifacts 三段忽略规则,不动现有 node_modules/.next/dist 规则;清掉 8 个 IPro 残留 node 进程(PID 9812/25972/32408/41420/44140/55736/58428/59388)释放 3000/3001;删除 26 个根目录调试脚本 (find-corrupted.js/ts, find-user.js, fix-stories.js, list-chars.js, check_api.py, check_pdf.cjs, check_story_tmp.js, check_story.py, parse_pdf.cjs, patch_story.py, find.txt, fu.txt, tabs.txt, devnull, home.png, navigate.json, vid.json, vid2.json, vid3.json, cstcloud-mcp.json, decision.json, test_output.pdf, .tmp-write-test.txt, ill-route-backup.ts);删除 48 个 .tmp-* 临时日志 + .tmp-current-story.pdf;删除 7 个旧启动日志 (dev-web.log, dev-api.log, next-dev.log, web-stdout.log, web-stderr.log, api-stdout.log, api-stderr.log);删除 apps/web/.next 和 apps/api/dist 构建缓存
@@ -672,3 +735,10 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 - Validation: api build 0 error, web build 0 error, smoke.ps1 SMOKE TEST PASSED
 - Risks/Next: dev:web dev:api 重启后 .next 需清;Redis /apiz live ping 暂未测,后续按需
 
+
+### 2026-06-12 10:55 +08:00 - Codex
+- Summary: 修"生成有声绘本"按钮默认 audioType 从 'minimax' 改 'tts'(Edge TTS 免费),避免用户点默认按钮就踩付费额度坑
+- Changed: apps/web/app/(app)/gallery/[id]/page.tsx: handleGenerateAudiobook 默认 audioType tts
+- Files: apps/web/app/(app)/gallery/[id]/page.tsx
+- Validation: dev:web hot reload,前端页面"生成有声绘本"按钮行为已变(从付费 → 免费 Edge TTS);用户仍可手动切 minimax/克隆
+- Risks/Next: 之前已缓存的 minimax 旁白不受影响(只对新建 audiobook 起作用);handleStartVideo 的 smart-default 逻辑会跟着切到 tts(因为缓存 audioType 是 tts)

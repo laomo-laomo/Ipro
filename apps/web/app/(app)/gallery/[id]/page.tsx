@@ -256,7 +256,10 @@ export default function GalleryDetailPage() {
     try {
       setIsLoadingAudiobook(true);
       setAudiobookError(null);
-      const nextAudiobook = await generateAudiobook(storyId, { audioType: 'minimax' });
+      // Default to Edge TTS (free) so the user doesn't hit MiniMax quota
+      // errors; users can still pick a different voice from the UI if they
+      // want minimax / cloned audio.
+      const nextAudiobook = await generateAudiobook(storyId, { audioType: 'tts' });
       setAudiobook(nextAudiobook);
     } catch (err) {
       const message = err instanceof Error ? err.message : '生成有声绘本失败';
