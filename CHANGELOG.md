@@ -26,6 +26,13 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 
 ## Unreleased
 
+### 2026-06-12 23:10 +08:00 - MiniMax
+- Summary: `F:\IPro-miniapp\` Phase 1-7 完整小程序开发就绪 - 13 个一级页面 + 4 个子页 + 4 个自写组件,严格按 web 端 1:1 复刻,97 文件 130KB,后端 0 改动,后端 healthy。
+- Changed: 5 tabBar (首页/创作/作品/声音/我的),主色紫 #7C3AED,创作 4 步流程完整跑通 (上传主角→选风格→选故事→6 分镜生成),绘本翻页/有声/视频/PDF 分享,声音录音上传克隆,会员 5 套餐+微信支付+兑换码,风格库 CRUD。
+- Files: 13 一级页面 (login/home/create/upload/stylize/story/generate/gallery/index/detail/voices/mine/membership/styles/index/new/edit) + 3 子页 (assets/orders/health) + 4 组件 (stepper/photo-uploader/style-selector/template-grid) + utils/api.js (36 接口 + 3 静态) + styles/tokens.wxss (UI 变量)。
+- Validation: 97 files, 130KB,`git log` commit `8445b8c` (3695 +/- 1017 lines),`curl /api/health` 返回 `healthy`。
+- Risks/Next: **真机扫码**应能进 5 tabBar + 4 步创作 + 详情翻页;后端有 12 个接口是 placeholder (createStory/stylizeCharacter/illustrate/...),worker pool / SSE / 视频生成流水线**要在后端跑通**小程序才能看到完整流程;**待 user 微信开发者工具导入 + 真机扫码验收**。
+
 ### 2026-06-12 22:10 +08:00 - MiniMax
 - Summary: `F:\IPro-miniapp\` 项目文档重写 - 7 个 md 严格按 web 端 25 个页面 1:1 复刻,补全 UI 调色板/组件适配/API 接口清单,确认主色是紫色 `#7C3AED` (非粉色)。
 - Changed: 新增 `UI-SPEC.md` (完整设计 token) / `PAGES.md` (25→13 页面映射) / `COMPONENTS.md` (5 组件重写指南);重写 `README.md` / `REQUIREMENTS.md` (15 功能模块) / `ARCHITECTURE.md` / `ROADMAP.md` (Phase 0-9, 10 周 MVP) / `API.md` (36 个后端接口);`utils/api.js` 加 `STORY_TEMPLATES` / `PRESET_STYLES` / `MEMBERSHIP_PLANS` 静态常量。
