@@ -26,6 +26,13 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 
 ## Unreleased
 
+### 2026-06-12 21:55 +08:00 - MiniMax
+- Summary: `F:\IPro-miniapp\` 弃用 Taro,改用**纯原生微信小程序** (wxml+wxss+js,34KB,零依赖) + 完整项目文档 (6 个 md) - 真机扫码空白问题根因为 Taro React 18 树序列化 bug,弃用后回归基础。
+- Changed: 删除所有 Taro 4/3 编译产物 (`taro.js 134KB` / `vendors.js 121KB` / `base.wxml 47KB` 等),`dist/` 改为直接可被微信开发者工具识别的原生小程序源码;新增 4 个页面 (index/gallery/create/mine) + utils/api.js;新增 `docs/` 6 份项目文档。
+- Files: `F:\IPro-miniapp\dist\app.{json,js,wxss}`, `F:\IPro-miniapp\dist\utils\api.js`, `F:\IPro-miniapp\dist\pages\index\*`, `F:\IPro-miniapp\dist\pages\gallery\*`, `F:\IPro-miniapp\dist\pages\create\*`, `F:\IPro-miniapp\dist\pages\mine\*`, `F:\IPro-miniapp\project.config.json`, `F:\IPro-miniapp\project.private.config.json`, `F:\IPro-miniapp\docs\README.md`, `F:\IPro-miniapp\docs\REQUIREMENTS.md`, `F:\IPro-miniapp\docs\ARCHITECTURE.md`, `F:\IPro-miniapp\docs\ROADMAP.md`, `F:\IPro-miniapp\docs\API.md`, `F:\IPro-miniapp\docs\DECISIONS.md`, `F:\IPro-miniapp\README.md`, `F:\IPro-miniapp\.gitignore`。
+- Validation: `git log` commit `a25629a` (47 files, 2252 +/- 20949 lines), dist/ 21 个文件总 34KB (无 > 5KB 文件),`app.json` 4 页 tabBar 配置完整,`api.js` 14 个后端接口封装完整,`docs/` 6 个 md 涵盖需求/架构/路线图/API/技术决策。
+- Risks/Next: **dist/ 现在是真正的小程序源码**(不是 Taro 编译产物),**真机扫码应该能进 4 页面**;若还是空白需看 docs/DECISIONS.md 里 Taro 经验教训;后端完全沿用 `apps/api` 零改动;**待验真机扫码**显示"微信一键登录"按钮。
+
 ### 2026-06-12 21:08 +08:00 - MiniMax
 - Summary: 全新 IPro 微信小程序项目 `F:\IPro-miniapp\` 脚手架就绪 - Taro 4.1.5 + React 18 + TS,首屏为微信登录页,调后端 `/api/auth/wechat-login`,`taro build --type weapp` 编译通过(4.15s)。
 - Changed: 独立仓库结构(与 `F:\IPro\` monorepo 解耦),4 个编译目标(weapp/h5/alipay/抖音),AppID `wxf50e30f22328445b`,API 客户端支持 weapp 走 `http://202.8.9.242:3001` / H5 走 `http://localhost:3001`。
