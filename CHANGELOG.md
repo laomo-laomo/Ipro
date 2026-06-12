@@ -26,6 +26,13 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 
 ## Unreleased
 
+### 2026-06-12 22:10 +08:00 - MiniMax
+- Summary: `F:\IPro-miniapp\` 项目文档重写 - 7 个 md 严格按 web 端 25 个页面 1:1 复刻,补全 UI 调色板/组件适配/API 接口清单,确认主色是紫色 `#7C3AED` (非粉色)。
+- Changed: 新增 `UI-SPEC.md` (完整设计 token) / `PAGES.md` (25→13 页面映射) / `COMPONENTS.md` (5 组件重写指南);重写 `README.md` / `REQUIREMENTS.md` (15 功能模块) / `ARCHITECTURE.md` / `ROADMAP.md` (Phase 0-9, 10 周 MVP) / `API.md` (36 个后端接口);`utils/api.js` 加 `STORY_TEMPLATES` / `PRESET_STYLES` / `MEMBERSHIP_PLANS` 静态常量。
+- Files: `F:\IPro-miniapp\docs\UI-SPEC.md` (9.8KB), `F:\IPro-miniapp\docs\PAGES.md` (11.6KB), `F:\IPro-miniapp\docs\COMPONENTS.md` (10.7KB), `F:\IPro-miniapp\docs\README.md` (4.6KB), `F:\IPro-miniapp\docs\REQUIREMENTS.md` (13.4KB), `F:\IPro-miniapp\docs\ARCHITECTURE.md` (8.8KB), `F:\IPro-miniapp\docs\ROADMAP.md` (7.3KB), `F:\IPro-miniapp\docs\API.md` (6.0KB), `F:\IPro-miniapp\dist\utils\api.js` (36 接口 + 3 静态)。
+- Validation: 9 个 md 总 78KB,`utils/api.js` 36 接口 + 3 静态,`git log` commit `3daca2e` (9 files, 1803 +/- 527 lines),`dist/` 仍 40KB (无新代码, 只文档)。
+- Risks/Next: 文档是开发指南, **不是已实现的代码**;真正的 13 页面 + 4 组件要在 Phase 1-7 写;每页都有 web 端页面 reference + 复刻细节 + API 调用清单,AI/人都能照着写。
+
 ### 2026-06-12 21:55 +08:00 - MiniMax
 - Summary: `F:\IPro-miniapp\` 弃用 Taro,改用**纯原生微信小程序** (wxml+wxss+js,34KB,零依赖) + 完整项目文档 (6 个 md) - 真机扫码空白问题根因为 Taro React 18 树序列化 bug,弃用后回归基础。
 - Changed: 删除所有 Taro 4/3 编译产物 (`taro.js 134KB` / `vendors.js 121KB` / `base.wxml 47KB` 等),`dist/` 改为直接可被微信开发者工具识别的原生小程序源码;新增 4 个页面 (index/gallery/create/mine) + utils/api.js;新增 `docs/` 6 份项目文档。
