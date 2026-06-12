@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { BarChart3, Crown, LogOut, Package, ReceiptText, TicketPercent, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthContext } from '@/providers/AuthProvider';
 import { Button } from '@/components/ui/button';
 
 const ADMIN_NAV = [
-  { href: '/admin', label: '概览', icon: BarChart3 },
+  { href: '/admin', label: '总览', icon: BarChart3 },
   { href: '/admin/redeem-codes', label: '兑换码', icon: TicketPercent },
   { href: '/admin/orders', label: '订单', icon: ReceiptText },
   { href: '/admin/users', label: '用户', icon: Users },
@@ -19,8 +20,16 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading, logout } = useAuthContext();
+  // Defer the auth-driven branch to after mount so SSR and the first client
+  // render paint identical markup, avoiding the hydration mismatch on the
+  // admin shell (which kept swapping between the loading screen and the
+  // children when localStorage became available mid-hydration).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  if (isLoading) {
+  if (!mounted || isLoading) {
     return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">正在加载管理员空间...</div>;
   }
 

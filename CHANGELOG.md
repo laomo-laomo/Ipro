@@ -26,6 +26,20 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 
 ## Unreleased
 
+### 2026-06-12 15:30 +08:00 - MiMoCode
+- Summary: 修复 7 个 bug：插画 double-update、ESM require、角色服装缓存缺失、重试竞态、会员重复创建、故事列表无分页、故事完成判定过松。
+- Changed: 插画后台 worker 移除冗余 update；video.service.ts / ffmpeg-renderer.ts 中 require 改 ESM readFileSync；/create 路由缓存命中/未命中路径补全 ensureCharacterCostumeForStory；插画重试加 processing+retryCount 并发锁；processMembershipPayment 改为 extend 现有会员而非 create 新行；GET /api/stories 加 limit/offset 分页；isStoryComplete 场景下限从 3 提到 5；generate 页 useCallback 补 loadStory 依赖。
+- Files: `apps/api/src/routes/illustration/index.ts`, `apps/api/src/services/video.service.ts`, `apps/api/src/services/ffmpeg-renderer.ts`, `apps/api/src/routes/story/index.ts`, `apps/api/src/services/payment.service.ts`, `apps/api/src/services/ai.service.ts`, `apps/web/app/(app)/create/generate/page.tsx`.
+- Validation: `npm run build` 通过（API + Web 0 error）；tsc --noEmit 通过。
+- Risks/Next: story list 分页为向后兼容默认不传 limit 仍返回全部；后续前端可按需传 limit/offset。
+
+### 2026-06-12 16:10 +08:00 - MiMoCode
+- Summary: 新增「次卡」会员类型，一次性购买，制作1个故事（最多20页），无有效期限制。
+- Changed: membership.ts 新增 `times` tier + `maxScenes=20` 字段 + `MEMBERSHIP_MAX_SCENES` 映射 + `periodDays=0`；config/index.ts 新增 `timesCard` 价格；membership.service.ts 新增 `getMaxScenesForUser` + quotaStatus 返回 `maxScenes`；illustration route 新增 maxScenes 限制检查；redeem/admin/membership purchase schema 支持 `times`；payment.service.ts `createMembershipOrder` 接受 `times`；前端 types/membership.ts 新增 `times` plan + `maxScenes` 字段；membership-card 显示页数限制和"一次购买"文案。
+- Files: `apps/api/src/config/membership.ts`, `apps/api/src/config/index.ts`, `apps/api/src/services/membership.service.ts`, `apps/api/src/services/payment.service.ts`, `apps/api/src/services/redeem.service.ts`, `apps/api/src/routes/illustration/index.ts`, `apps/api/src/routes/membership/index.ts`, `apps/api/src/routes/admin/index.ts`, `apps/web/types/membership.ts`, `apps/web/lib/api/membership.ts`, `apps/web/components/ui/membership-card.tsx`.
+- Validation: `npm run build` 通过（API + Web 0 error）；tsc --noEmit 通过。
+- Risks/Next: 次卡用户需重启 dev:api 加载新 MembershipTier 类型；生产环境需 `prisma db push` 同步（无 schema 变更，仅 TS 类型扩展）。
+
 ### 2026-06-11 18:29 +08:00 - Codex
 - Summary: 将兑换码管理页状态和类型文案改为中文。
 - Changed: 兑换码筛选下拉、历史表格状态/类型/会员档位显示从英文枚举改为中文标签。
@@ -742,3 +756,13 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 - Files: apps/web/app/(app)/gallery/[id]/page.tsx
 - Validation: dev:web hot reload,前端页面"生成有声绘本"按钮行为已变(从付费 → 免费 Edge TTS);用户仍可手动切 minimax/克隆
 - Risks/Next: 之前已缓存的 minimax 旁白不受影响(只对新建 audiobook 起作用);handleStartVideo 的 smart-default 逻辑会跟着切到 tts(因为缓存 audioType 是 tts)
+
+### 2026-06-12 14:50 +08:00 - Codex
+- Summary: 修 admin 页 hydration 报错(根因是 AdminShell 在 SSR/CSR 之间 user state 不一致)——结果导致整个 admin 页被 React 红屏挡住,看不到"兑换码历史"列表,点不到"作废"按钮
+- Changed:
+  - apps/web/components/admin/admin-shell.tsx: 加 mounted flag,SSR + 第一次 client render 都渲染 loading 屏,等 useEffect 后再切到 children/无权限
+  - apps/web/components/layout/app-shell.tsx: 包 <HydrationSafeRoot>(清翻译扩展注入的 className) + <main suppressHydrationWarning>
+  - apps/web/components/hydration-safe-root.tsx (new): mount 后清掉 translate-tooltip-* / translator-hidden 等扩展 class
+- Files: 2 modified + 1 new
+- Validation: web build 0 error;admin 页 dev:web hot-reload 后应不再红屏
+- Risks/Next: 翻译扩展的 hidden attribute mismatch 仍可能偶然出现(没去管 hidden,只清 className);admin route 整体缺 auth guard(无 token 也能访问 /api/admin/redeem-codes),下次单独修
