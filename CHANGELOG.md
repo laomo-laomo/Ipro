@@ -26,6 +26,13 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 
 ## Unreleased
 
+### 2026-06-13 10:20 +08:00 - MiniMax
+- Summary: `F:\IPro-miniapp\` 修关键 bug - 8 个浅层 pages (login/home/mine/voices/membership/assets/orders/health) + create/upload 的 `require('../../utils/api.js')` 路径全错 (应为 `../../../utils/api.js`),导致 JS 加载失败页面空白,已全部修正。
+- Changed: 9 个文件,require 路径 `../../utils/api.js` → `../../../utils/api.js` (上一级是 `dist/pages/`, api.js 在 `dist/utils/`)。
+- Files: `dist/pages/login/index.js`, `dist/pages/home/index.js`, `dist/pages/mine/index.js`, `dist/pages/voices/index.js`, `dist/pages/membership/index.js`, `dist/pages/assets/index.js`, `dist/pages/orders/index.js`, `dist/pages/health/index.js`, `dist/pages/create/upload/index.js`。
+- Validation: `git log` commit `64e47b1` (9 files, 17 +/- 9),`Test-Path dist/utils/api.js = True`,8 个浅层 require 全部改为 `../../../utils/api.js`。
+- Risks/Next: 微信开发者工具点"编译"按钮重新加载,8 个浅层页面 + 创作上传页应该正常显示;若还有空白**需在控制台 Console 看具体 JS 错误**。
+
 ### 2026-06-12 23:10 +08:00 - MiniMax
 - Summary: `F:\IPro-miniapp\` Phase 1-7 完整小程序开发就绪 - 13 个一级页面 + 4 个子页 + 4 个自写组件,严格按 web 端 1:1 复刻,97 文件 130KB,后端 0 改动,后端 healthy。
 - Changed: 5 tabBar (首页/创作/作品/声音/我的),主色紫 #7C3AED,创作 4 步流程完整跑通 (上传主角→选风格→选故事→6 分镜生成),绘本翻页/有声/视频/PDF 分享,声音录音上传克隆,会员 5 套餐+微信支付+兑换码,风格库 CRUD。
