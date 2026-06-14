@@ -422,9 +422,23 @@ export async function generateSceneIllustration(
   let sourceImageUrl: string | undefined;
   let characterStyle: string | undefined;
 
-  if (characterId) {
+  // Fall back to the story's bound character when the caller (e.g. the
+  // miniprogram `/illustrate` endpoint, which currently omits characterId)
+  // didn't pass one. Without this, the illustration falls through to
+  // generateSceneBackground() — pure text-to-image, no stylized character as
+  // a reference — and the generated scene looks nothing like the user's
+  // chosen character. Use whichever the caller specified first, then the
+  // story's own characterId as the canonical source of truth.
+  const effectiveCharacterId = characterId || story.characterId || undefined;
+  if (!characterId && story.characterId) {
+    console.log(
+      `[Illustrate] characterId not passed by caller; falling back to story.characterId=${story.characterId} for story ${storyId}`
+    );
+  }
+
+  if (effectiveCharacterId) {
     const character = await prisma.character.findUnique({
-      where: { id: characterId },
+      where: { id: effectiveCharacterId },
     });
 
     if (character?.stylizedPhotoUrl) {
@@ -433,6 +447,9 @@ export async function generateSceneIllustration(
       // character's clothing matches the story. Fall back to the global
       // stylized photo when no per-story override exists.
       sourceImageUrl = story.characterStylizedUrl || character.stylizedPhotoUrl;
+      console.log(
+        `[Illustrate] story=${storyId} scene=${sceneIndex} using stylized character ${effectiveCharacterId} as image-to-image reference`
+      );
     } else {
       throw new Error('Character has no stylized photo. Please complete the style step first.');
     }
