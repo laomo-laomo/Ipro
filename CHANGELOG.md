@@ -26,6 +26,13 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 
 ## Unreleased
 
+### 2026-06-15 09:30 +08:00 - MiniMax
+- Summary: 修「选故事模板点开始生成 → request:fail timeout」 —— `apps/api/src/routes/story/index.ts` 6 处 `await ensureCharacterCostumeForStory` 同步等 AI 服装重生成(可耗 30-60s+),撞 wx.request 60s 默认超时,改成 fire-and-forget 后台异步,主路径立即用旧图返回。
+- Changed: 6 处 await 全部改 `void ensureCharacterCostumeForStory(...).then(costume => { ... }).catch(() => {})`;`story.characterStylizedUrl` 同步用 `character.stylizedPhotoUrl` 兜底;`costume.restyled && costume.url` 触发后台 update。涉及路由:`/api/stories/create`(2 处)、`/api/stories/generate`(2 处)、`/api/stories/from-template`(2 处)。注意 `/create` 路由 cache hit/cache miss 之前没调 costume(HEAD 状态),本次 add + non-blocking 一起;`/generate` 和 `/from-template` 原本就是 await 阻塞,本次改 fire-and-forget。ai.service.ts 的 ensureCharacterCostumeForStory 函数内部兜底(failure→fallback 旧图)保留不动,跟路由层 fire-and-forget 语义一致。
+- Files: `apps/api/src/routes/story/index.ts`。
+- Validation: `npm run build --workspace=apps/api` 通过(0 error)。`tsx watch` 自动 reload,小程序端 `request:fail timeout` 应消失。
+- Risks/Next: 第一次进新故事模板时角色服装可能是旧的(等后台 restyle 1-2 分钟更新到 `story.characterStylizedUrl`),用户感知:绘本生成时角色服装跟模板主题暂时不完全匹配,但不阻塞流程,后台完成后下次重试/重新进绘本就会用新图。
+
 ### 2026-06-14 22:30 +08:00 - MiniMax
 - Summary: 修 `generateSceneIllustration` 未传 `characterId` 时退化为纯文生图 —— 后端兜底 `story.characterId`,小程序端 `/illustrate` 没传 characterId 也能用风格化角色垫图。
 - Changed: `apps/api/src/services/illustration.service.ts` `generateSceneIllustration` 改 `if (characterId)` 为 `if (characterId || story.characterId)`,优先用 caller 传入的 `characterId`,否则 fallback 到 `story.characterId`;新增 fallback 日志确认走的是 image-to-image 而非 text-to-image 分支;小程序 `dist/utils/api.js startIllustration(id)` / `pages/create/generate/index.js` / web `useGallery.ts startIllustrationFn` 不动,改动只一处后端。

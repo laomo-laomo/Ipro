@@ -408,7 +408,28 @@ export async function storyRoutes(fastify: FastifyInstance) {
       const source = templateId ? 'template' : 'custom';
 
       if (cachedTemplate) {
-        // Cache hit: create story with content immediately
+        // Cache hit: create story with content immediately.
+        // Per-story costume (cache hit fast-path, restyle on cache miss) is
+        // fired in the background — never block the HTTP response on AI
+        // generation, which can take 30-60s+ and would blow the miniprogram's
+        // 60s wx.request timeout. ai.service.ts already falls back to the
+        // existing stylized photo on restyle failure, so this is safe.
+        const initialCostumeUrl = character.stylizedPhotoUrl;
+        void ensureCharacterCostumeForStory(
+          fastify.prisma,
+          character,
+          /* storyId */ '', // story not created yet; we set characterStylizedUrl after
+          cachedTemplate.title,
+        ).then((costume) => {
+          if (!costume.restyled || !costume.url) return;
+          // Story row already exists (created just below). If a later create
+          // overwrote characterStylizedUrl with the old URL, refresh it.
+          fastify.prisma.story.update({
+            where: { id: story.id },
+            data: { characterStylizedUrl: costume.url },
+          }).catch(() => { /* story may not exist in some flows */ });
+        }).catch(() => { /* ensure internally already falls back */ });
+
         const storyboard = parseStoryboard(cachedTemplate.scenes, cachedTemplate.title);
         const story = await fastify.prisma.story.create({
           data: {
@@ -419,15 +440,19 @@ export async function storyRoutes(fastify: FastifyInstance) {
             scenes: storyboardToStorage(storyboard),
             source,
             status: 'completed',
+            characterStylizedUrl: initialCostumeUrl,
           },
         });
         return {
           success: true,
-          data: { storyId: story.id, title: story.title, content: story.content, storyboard, scenes: storyboardToLegacyScenes(storyboard), status: 'completed' },
+          data: { storyId: story.id, title: story.title, content: story.content, storyboard, scenes: storyboardToLegacyScenes(storyboard), status: 'completed', characterStylizedUrl: initialCostumeUrl, costumeRestyled: false },
         };
       }
 
-      // 3. Cache miss: create empty story, generate in background
+      // 3. Cache miss: create empty story, generate in background.
+      // Per-story costume (cache hit fast-path, restyle on cache miss) is
+      // fired in the background — never block the HTTP response on AI
+      // generation (see comment in the cache-hit branch above).
       const story = await fastify.prisma.story.create({
         data: {
           userId,
@@ -437,14 +462,28 @@ export async function storyRoutes(fastify: FastifyInstance) {
           scenes: storyboardToStorage({ version: 1, title, scenes: [] }),
           source,
           status: 'draft',
+          characterStylizedUrl: character.stylizedPhotoUrl,
         },
       });
+
+      void ensureCharacterCostumeForStory(
+        fastify.prisma,
+        character,
+        story.id,
+        title,
+      ).then((costume) => {
+        if (!costume.restyled || !costume.url) return;
+        fastify.prisma.story.update({
+          where: { id: story.id },
+          data: { characterStylizedUrl: costume.url },
+        }).catch(() => {});
+      }).catch(() => {});
 
       generateStoryInBackground(fastify, story.id, title, characterId);
 
       return {
         success: true,
-        data: { storyId: story.id, title: story.title, content: '', storyboard: { version: 1, title: story.title, scenes: [] }, scenes: [], status: 'draft' },
+        data: { storyId: story.id, title: story.title, content: '', storyboard: { version: 1, title: story.title, scenes: [] }, scenes: [], status: 'draft', characterStylizedUrl: character.stylizedPhotoUrl, costumeRestyled: false },
       };
     } catch (error) {
       fastify.log.error(error);
@@ -471,13 +510,22 @@ export async function storyRoutes(fastify: FastifyInstance) {
       const cachedTemplate = await fastify.prisma.storyTemplate.findFirst({ where: { title, status: 'active' } });
       if (cachedTemplate) {
         const storyboard = parseStoryboard(cachedTemplate.scenes, cachedTemplate.title);
-        // Per-story costume (cache hit fast-path, restyle on cache miss).
-        const costume = await ensureCharacterCostumeForStory(
+        // Per-story costume (cache hit fast-path, restyle on cache miss) —
+        // fired in the background, never blocks the HTTP response.
+        const initialCostumeUrl = character.stylizedPhotoUrl;
+        void ensureCharacterCostumeForStory(
           fastify.prisma,
           character,
           /* storyId */ '',
           cachedTemplate.title,
-        );
+        ).then((costume) => {
+          if (!costume.restyled || !costume.url) return;
+          fastify.prisma.story.update({
+            where: { id: story.id },
+            data: { characterStylizedUrl: costume.url },
+          }).catch(() => {});
+        }).catch(() => {});
+
         const story = await fastify.prisma.story.create({
           data: {
             userId,
@@ -487,23 +535,31 @@ export async function storyRoutes(fastify: FastifyInstance) {
             scenes: storyboardToStorage(storyboard),
             source: 'custom',
             status: 'completed',
-            characterStylizedUrl: costume.url,
+            characterStylizedUrl: initialCostumeUrl,
           },
         });
-        return { success: true, data: { storyId: story.id, title: story.title, content: story.content, storyboard, scenes: storyboardToLegacyScenes(storyboard), status: 'completed', characterStylizedUrl: costume.url, costumeRestyled: costume.restyled } };
+        return { success: true, data: { storyId: story.id, title: story.title, content: story.content, storyboard, scenes: storyboardToLegacyScenes(storyboard), status: 'completed', characterStylizedUrl: initialCostumeUrl, costumeRestyled: false } };
       }
       const story = await fastify.prisma.story.create({
-        data: { userId, characterId, title, content: '', scenes: storyboardToStorage({ version: 1, title, scenes: [] }), source: 'custom', status: 'draft' },
+        data: { userId, characterId, title, content: '', scenes: storyboardToStorage({ version: 1, title, scenes: [] }), source: 'custom', status: 'draft', characterStylizedUrl: character.stylizedPhotoUrl },
       });
-      // Per-story costume (cache hit fast-path, restyle on cache miss).
-      const costume = await ensureCharacterCostumeForStory(
+      // Per-story costume (cache hit fast-path, restyle on cache miss) —
+      // fired in the background, never blocks the HTTP response.
+      void ensureCharacterCostumeForStory(
         fastify.prisma,
         character,
         story.id,
         title,
-      );
+      ).then((costume) => {
+        if (!costume.restyled || !costume.url) return;
+        fastify.prisma.story.update({
+          where: { id: story.id },
+          data: { characterStylizedUrl: costume.url },
+        }).catch(() => {});
+      }).catch(() => {});
+
       generateStoryInBackground(fastify, story.id, title, characterId);
-      return { success: true, data: { storyId: story.id, title: story.title, content: '', storyboard: { version: 1, title: story.title, scenes: [] }, scenes: [], status: 'draft', characterStylizedUrl: costume.url, costumeRestyled: costume.restyled } };
+      return { success: true, data: { storyId: story.id, title: story.title, content: '', storyboard: { version: 1, title: story.title, scenes: [] }, scenes: [], status: 'draft', characterStylizedUrl: character.stylizedPhotoUrl, costumeRestyled: false } };
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({ success: false, message: 'Failed to generate story' });
@@ -535,13 +591,22 @@ export async function storyRoutes(fastify: FastifyInstance) {
       if (cachedTemplate && cachedScenes.length >= MIN_TEMPLATE_SCENES) {
         // Per-story costume: if the character's current costume was generated
         // for a different title, re-stylize so the character's clothing matches
-        // this story. Cache hit (same title) is a no-op.
-        const costume = await ensureCharacterCostumeForStory(
+        // this story. Cache hit (same title) is a no-op. Fired in the
+        // background — never blocks the HTTP response.
+        const initialCostumeUrl = character.stylizedPhotoUrl;
+        void ensureCharacterCostumeForStory(
           fastify.prisma,
           character,
           /* storyId */ '',  // story not created yet; we'll set characterStylizedUrl after
           title,
-        );
+        ).then((costume) => {
+          if (!costume.restyled || !costume.url) return;
+          fastify.prisma.story.update({
+            where: { id: story.id },
+            data: { characterStylizedUrl: costume.url },
+          }).catch(() => {});
+        }).catch(() => {});
+
         const story = await fastify.prisma.story.create({
           data: {
             userId,
@@ -551,10 +616,10 @@ export async function storyRoutes(fastify: FastifyInstance) {
             scenes: storyboardToStorage(cachedStoryboard!),
             source: 'template',
             status: 'completed',
-            characterStylizedUrl: costume.url,
+            characterStylizedUrl: initialCostumeUrl,
           },
         });
-        return { success: true, data: { storyId: story.id, title: story.title, content: story.content, storyboard: cachedStoryboard, scenes: storyboardToLegacyScenes(cachedStoryboard!), status: 'completed', characterStylizedUrl: costume.url, costumeRestyled: costume.restyled } };
+        return { success: true, data: { storyId: story.id, title: story.title, content: story.content, storyboard: cachedStoryboard, scenes: storyboardToLegacyScenes(cachedStoryboard!), status: 'completed', characterStylizedUrl: initialCostumeUrl, costumeRestyled: false } };
       }
       if (cachedTemplate && cachedScenes.length < MIN_TEMPLATE_SCENES) {
         fastify.log.warn(
@@ -563,17 +628,25 @@ export async function storyRoutes(fastify: FastifyInstance) {
         );
       }
       const story = await fastify.prisma.story.create({
-        data: { userId, characterId, title, content: '', scenes: storyboardToStorage({ version: 1, title, scenes: [] }), source: 'template', status: 'draft' },
+        data: { userId, characterId, title, content: '', scenes: storyboardToStorage({ version: 1, title, scenes: [] }), source: 'template', status: 'draft', characterStylizedUrl: character.stylizedPhotoUrl },
       });
-      // Per-story costume (cache hit fast-path, restyle on cache miss).
-      const costume = await ensureCharacterCostumeForStory(
+      // Per-story costume (cache hit fast-path, restyle on cache miss) —
+      // fired in the background, never blocks the HTTP response.
+      void ensureCharacterCostumeForStory(
         fastify.prisma,
         character,
         story.id,
         title,
-      );
+      ).then((costume) => {
+        if (!costume.restyled || !costume.url) return;
+        fastify.prisma.story.update({
+          where: { id: story.id },
+          data: { characterStylizedUrl: costume.url },
+        }).catch(() => {});
+      }).catch(() => {});
+
       generateStoryInBackground(fastify, story.id, title, characterId);
-      return { success: true, data: { storyId: story.id, title: story.title, content: '', storyboard: { version: 1, title: story.title, scenes: [] }, scenes: [], status: 'draft', characterStylizedUrl: costume.url, costumeRestyled: costume.restyled } };
+      return { success: true, data: { storyId: story.id, title: story.title, content: '', storyboard: { version: 1, title: story.title, scenes: [] }, scenes: [], status: 'draft', characterStylizedUrl: character.stylizedPhotoUrl, costumeRestyled: false } };
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({ success: false, message: 'Failed to create story from template' });
