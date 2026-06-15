@@ -771,6 +771,19 @@ fastify.get('/:id', async (request: FastifyRequest<{ Params: StoryParams }>, rep
         status,
         currentStep,
         progress,
+        // 修复 (2026-06-15): 把 illustrations 数组也返回,小程序生成页
+        // 需要根据 illustration.status / errorMessage / imageUrl 渲染每张
+        // 分镜卡片和失败原因。原来 /progress 只返回数字统计,前端拿不到
+        // 单张分镜的细节,失败原因 / 重试按钮都没法定位到具体哪一张。
+        illustrations: story.illustrations.map((ill: any) => ({
+          id: ill.id,
+          sceneIndex: ill.sceneIndex,
+          status: ill.status,
+          imageUrl: ill.imageUrl,
+          errorMessage: ill.errorMessage,
+          failureCategory: ill.failureCategory,
+          retryCount: ill.retryCount,
+        })),
         completedIllustrations,
         failedIllustrations,
         totalIllustrations,
