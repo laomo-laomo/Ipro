@@ -124,8 +124,13 @@ export function useAuth(): UseAuthState & UseAuthActions {
       // 清除本地状态
       setUser(null);
 
-      // 跳转到登录页
-      router.push('/login');
+      // 根据当前路径决定跳转目标
+      const currentPath = window.location.pathname;
+      if (currentPath.startsWith('/admin')) {
+        router.push('/admin/login');
+      } else {
+        router.push('/login');
+      }
     }
   }, [router]);
 

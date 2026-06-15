@@ -1,11 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BookOpen, Clock, Crown, Sparkles, Video } from 'lucide-react';
+import { BookOpen, Clock, Crown, Sparkles, TicketPercent, Video } from 'lucide-react';
 import { useMembership } from '@/hooks/useMembership';
 import { MembershipStatus } from '@/components/ui/membership-status';
-import { PricingTable } from '@/components/ui/pricing-table';
-import { MEMBERSHIP_BENEFITS } from '@/types/membership';
+import { MEMBERSHIP_BENEFITS, MEMBERSHIP_PLANS, type MembershipTier } from '@/types/membership';
 import { GlassCard, MagicButton } from '@/components/magic';
 import { FadeIn, StaggerItem, StaggerList } from '@/components/motion';
 import { Input } from '@/components/ui/input';
@@ -42,7 +41,6 @@ export default function MembershipPage() {
     purchaseError,
     lastRedeemResult,
     loadMembershipStatus,
-    purchaseMembership,
     redeemCode,
   } = useMembership();
   const [redeemCodeValue, setRedeemCodeValue] = useState('');
@@ -50,21 +48,6 @@ export default function MembershipPage() {
   useEffect(() => {
     loadMembershipStatus();
   }, [loadMembershipStatus]);
-
-  const handlePurchase = async (planId: string, channel: 'wechat' | 'alipay' | 'stripe') => {
-    const result = await purchaseMembership(planId as 'weekly' | 'monthly' | 'quarterly' | 'yearly', channel);
-
-    if (result) {
-      if (result.qrCode) {
-        console.log('QR Code:', result.qrCode);
-      }
-
-      const redirectUrl = result.paymentUrl || result.checkoutUrl;
-      if (redirectUrl) {
-        window.location.href = redirectUrl;
-      }
-    }
-  };
 
   const handleRedeem = async () => {
     const code = redeemCodeValue.trim();
@@ -93,8 +76,8 @@ export default function MembershipPage() {
                 会员不仅是更多额度，更是完整解锁绘本下载、视频生成、声音魔法和更流畅的创作节奏。
               </p>
             </div>
-            <MagicButton href="#plans" size="lg" className="px-8">
-              升级会员，解锁全部魔法
+            <MagicButton href="#redeem" size="lg" className="px-8">
+              输入兑换码，解锁全部魔法
             </MagicButton>
           </div>
 
@@ -104,9 +87,9 @@ export default function MembershipPage() {
               <MembershipStatus status={membership} isLoading={isLoading} />
             </div>
             <div className="mt-5 rounded-[22px] bg-gradient-to-r from-violet-50 to-amber-50 p-4 md:mt-6 md:rounded-[24px] md:p-5">
-              <p className="text-sm text-muted-foreground">价值锚点</p>
-              <p className="mt-2 text-2xl font-extrabold text-violet-700 md:text-3xl">年卡用户平均每个故事仅 ¥1.3</p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">适合经常给孩子做睡前故事、节日纪念和成长记录的家庭。</p>
+              <p className="text-sm text-muted-foreground">开通方式</p>
+              <p className="mt-2 text-2xl font-extrabold text-violet-700 md:text-3xl">销售发码后即时兑换</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">兑换成功后自动叠加会员时长和可用额度。</p>
             </div>
           </GlassCard>
         </section>
@@ -126,26 +109,57 @@ export default function MembershipPage() {
         ))}
       </StaggerList>
 
+      <FadeIn delay={0.06}>
+        <section className="space-y-4">
+          <div className="text-center">
+            <p className="text-sm font-medium text-amber-600">会员套餐</p>
+            <h2 className="mt-2 text-2xl font-bold md:text-3xl">选择适合你的方案</h2>
+            <p className="mt-2 text-sm text-muted-foreground">次卡适合体验，周期卡适合长期创作。</p>
+          </div>
+          <StaggerList className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {MEMBERSHIP_PLANS.map((plan) => (
+              <StaggerItem key={plan.id}>
+                <GlassCard className={`relative p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-paper ${plan.maxScenes ? 'border-2 border-amber-300 bg-gradient-to-b from-amber-50 to-white' : ''}`}>
+                  {plan.maxScenes && (
+                    <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-amber-500 px-3 py-0.5 text-xs font-medium text-white">体验推荐</span>
+                  )}
+                  <h3 className="text-lg font-bold">{plan.name}</h3>
+                  <p className="mt-2 text-3xl font-extrabold text-violet-700">¥{plan.price}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {plan.maxScenes ? `一次购买 · 最多${plan.maxScenes}页` : `${plan.periodDays}天 · 约¥${plan.pricePerDay.toFixed(2)}/天`}
+                  </p>
+                  <ul className="mt-4 space-y-2">
+                    {plan.features.map((f, i) => (
+                      <li key={i} className="flex items-start gap-1.5 text-xs leading-5 text-muted-foreground">
+                        <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-violet-500" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                </GlassCard>
+              </StaggerItem>
+            ))}
+          </StaggerList>
+        </section>
+      </FadeIn>
+
       <FadeIn delay={0.08}>
-        <section id="plans" className="space-y-6">
+        <section id="redeem" className="space-y-6">
           {(error || purchaseError) && (
             <div className="rounded-[24px] border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
               {purchaseError || error}
             </div>
           )}
           <GlassCard className="p-5 sm:p-8">
-            <div className="mb-6 text-center">
-              <p className="text-sm font-medium text-amber-600">选择套餐</p>
-              <h2 className="mt-2 text-2xl font-bold md:text-3xl">挑一个最适合你们家的魔法频率</h2>
-            </div>
-            <PricingTable currentTier={membership?.tier} onPurchase={handlePurchase} isPurchasing={isPurchasing} />
-          </GlassCard>
-
-          <GlassCard className="p-5 sm:p-8">
-            <div className="mb-5">
-              <p className="text-sm font-medium text-violet-700">兑换码</p>
-              <h2 className="mt-2 text-2xl font-bold md:text-3xl">兑换积分、月卡、季卡或年卡</h2>
-              <p className="mt-2 text-sm leading-7 text-muted-foreground">输入兑换码后，系统会自动发放对应积分或会员权益。</p>
+            <div className="mb-5 flex items-start gap-3">
+              <span className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-amber-50 text-violet-700">
+                <TicketPercent className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-sm font-medium text-violet-700">兑换码</p>
+                <h2 className="mt-2 text-2xl font-bold md:text-3xl">兑换积分、月卡、季卡或年卡</h2>
+                <p className="mt-2 text-sm leading-7 text-muted-foreground">输入销售提供的兑换码，系统会自动发放对应积分或会员权益。</p>
+              </div>
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -156,7 +170,7 @@ export default function MembershipPage() {
                 className="h-11 rounded-full bg-white/80 px-4"
               />
               <Button onClick={handleRedeem} disabled={isPurchasing || !redeemCodeValue.trim()} className="h-11 rounded-full px-6">
-                立即兑换
+                {isPurchasing ? '兑换中...' : '立即兑换'}
               </Button>
             </div>
 
@@ -164,10 +178,26 @@ export default function MembershipPage() {
               <div className="mt-4 rounded-[20px] border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-800">
                 {lastRedeemResult.rewardType === 'points'
                   ? `兑换成功，已到账 ${lastRedeemResult.pointsAmount || 0} 积分，当前积分 ${lastRedeemResult.userPoints}。`
-                  : `兑换成功，已开通${lastRedeemResult.membershipTier === 'monthly' ? '月卡' : lastRedeemResult.membershipTier === 'quarterly' ? '季卡' : lastRedeemResult.membershipTier === 'yearly' ? '年卡' : '周卡'}，当前剩余额度 ${lastRedeemResult.membership.remainingQuota}。`}
+                  : `兑换成功，已开通${lastRedeemResult.membershipTier === 'times' ? '次卡' : lastRedeemResult.membershipTier === 'monthly' ? '月卡' : lastRedeemResult.membershipTier === 'quarterly' ? '季卡' : lastRedeemResult.membershipTier === 'yearly' ? '年卡' : '周卡'}，当前剩余额度 ${lastRedeemResult.membership.remainingQuota}。`}
               </div>
             )}
           </GlassCard>
+
+          <StaggerList className="grid gap-3 md:grid-cols-3">
+            {[
+              ['联系销售', '确认需要的会员档位或积分包。'],
+              ['获取兑换码', '销售发放一人一码或活动批次码。'],
+              ['输入兑换', '兑换后权益立即写入当前账号。'],
+            ].map(([title, desc], index) => (
+              <StaggerItem key={title}>
+                <GlassCard className="p-5">
+                  <p className="text-sm font-semibold text-amber-600">0{index + 1}</p>
+                  <h3 className="mt-2 text-lg font-bold">{title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{desc}</p>
+                </GlassCard>
+              </StaggerItem>
+            ))}
+          </StaggerList>
         </section>
       </FadeIn>
 

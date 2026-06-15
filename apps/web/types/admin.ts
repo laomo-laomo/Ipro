@@ -129,6 +129,11 @@ export interface AdminRedeemCodeCreateResult {
   rewardType: 'points' | 'membership';
   count: number;
   codes: string[];
+  batchTimestamp: string;
+  pointsAmount: number | null;
+  membershipTier: 'times' | 'times1' | 'times10' | 'times50' | 'times100' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | null;
+  expiresAt: string | null;
+  note: string | null;
 }
 
 export interface AdminRedeemCodeList {
@@ -137,7 +142,7 @@ export interface AdminRedeemCodeList {
     code: string;
     rewardType: 'points' | 'membership';
     pointsAmount: number | null;
-    membershipTier: 'weekly' | 'monthly' | 'quarterly' | 'yearly' | null;
+    membershipTier: 'times' | 'times1' | 'times10' | 'times50' | 'times100' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | null;
     expiresAt: string | null;
     usedAt: string | null;
     status: 'active' | 'used' | 'expired' | 'disabled';

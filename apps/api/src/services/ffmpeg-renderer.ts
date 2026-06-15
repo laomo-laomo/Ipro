@@ -102,7 +102,7 @@ async function downloadToFile(url: string, dest: string): Promise<void> {
     if (!existsSync(localPath)) {
       throw new Error(`Local upload not found: ${localPath}`);
     }
-    const buf = require('node:fs').readFileSync(localPath);
+    const buf = readFileSync(localPath);
     writeFileSync(dest, buf);
     return;
   }
@@ -114,7 +114,7 @@ async function downloadToFile(url: string, dest: string): Promise<void> {
     if (!existsSync(localPath)) {
       throw new Error(`Local temp file not found: ${localPath}`);
     }
-    const buf = require('node:fs').readFileSync(localPath);
+    const buf = readFileSync(localPath);
     writeFileSync(dest, buf);
     return;
   }

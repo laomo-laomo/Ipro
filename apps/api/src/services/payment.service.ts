@@ -305,7 +305,7 @@ export async function createVoiceCloneOrder(
  */
 export async function createMembershipOrder(
   userId: string,
-  cardType: 'weekly' | 'monthly' | 'quarterly' | 'yearly',
+  cardType: MembershipTier,
   paymentChannel: 'wechat' | 'alipay' | 'stripe'
 ): Promise<{ order: Order; paymentUrl: string }> {
   const prices = await getAllPrices();
@@ -600,6 +600,11 @@ function getMembershipName(order: Order): string {
     const metadata = order.metadata ? JSON.parse(order.metadata) : {};
     const cardType = metadata.cardType || 'monthly';
     const names: Record<string, string> = {
+      times: '1次卡',
+      times1: '1次卡',
+      times10: '10次卡',
+      times50: '50次卡',
+      times100: '100次卡',
       weekly: '周卡',
       monthly: '月卡',
       quarterly: '季卡',
@@ -612,7 +617,10 @@ function getMembershipName(order: Order): string {
 }
 
 /**
- * Process membership payment - create membership record
+ * Process membership payment - create or extend membership record.
+ * If the user already has an active membership, extend its expiry and add
+ * quota instead of creating a duplicate row (which would let users stack
+ * multiple memberships via rapid-fire orders).
  */
 async function processMembershipPayment(order: Order): Promise<void> {
   try {
@@ -620,23 +628,60 @@ async function processMembershipPayment(order: Order): Promise<void> {
     const cardType = (metadata.cardType || 'monthly') as MembershipTier;
     const periodDays = getPlanPeriodDays(cardType);
     const quota = MEMBERSHIP_DEFAULT_QUOTAS[cardType] || 0;
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + periodDays);
 
-    await prisma.membership.create({
-      data: {
+    // Look for an existing active membership (not yet expired)
+    const existing = await prisma.membership.findFirst({
+      where: {
         userId: order.userId,
-        cardType,
-        quota,
-        usedQuota: 0,
-        expiresAt,
         status: 'active',
+        expiresAt: { gt: new Date() },
       },
+      orderBy: { expiresAt: 'desc' },
     });
 
-    paymentLog('info', 'Membership created', { userId: order.userId, cardType, expiresAt });
+    if (existing) {
+      // Extend: push expiry from the LATER of (now, current expiry) and add quota
+      const baseDate = existing.expiresAt > new Date() ? existing.expiresAt : new Date();
+      const newExpiry = new Date(baseDate);
+      newExpiry.setDate(newExpiry.getDate() + periodDays);
+
+      await prisma.membership.update({
+        where: { id: existing.id },
+        data: {
+          cardType,
+          quota: existing.quota + quota,
+          expiresAt: newExpiry,
+          status: 'active',
+        },
+      });
+
+      paymentLog('info', 'Membership extended', {
+        userId: order.userId,
+        cardType,
+        previousExpiry: existing.expiresAt,
+        newExpiry,
+        addedQuota: quota,
+      });
+    } else {
+      // No active membership — create a new one
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + periodDays);
+
+      await prisma.membership.create({
+        data: {
+          userId: order.userId,
+          cardType,
+          quota,
+          usedQuota: 0,
+          expiresAt,
+          status: 'active',
+        },
+      });
+
+      paymentLog('info', 'Membership created', { userId: order.userId, cardType, expiresAt });
+    }
   } catch (error) {
-    paymentLog('error', 'Failed to create membership', { orderNo: order.orderNo, error });
+    paymentLog('error', 'Failed to process membership payment', { orderNo: order.orderNo, error });
     throw error;
   }
 }

@@ -7,6 +7,28 @@ import { GlassCard } from '@/components/magic';
 import { Button } from '@/components/ui/button';
 import { formatDate } from '@/lib/utils/date';
 
+const statusLabels: Record<string, string> = {
+  all: '全部',
+  pending: '待支付',
+  paid: '已支付',
+  cancelled: '已取消',
+  refunded: '已退款',
+};
+
+const typeLabels: Record<string, string> = {
+  membership: '会员',
+  voice_clone: '声音克隆',
+  image: '插画',
+  story: '故事',
+  video: '视频',
+};
+
+const channelLabels: Record<string, string> = {
+  wechat: '微信',
+  alipay: '支付宝',
+  stripe: 'Stripe',
+};
+
 export function OrdersTable({ orders, onFilter }: { orders: AdminOrderList | null; onFilter: (status?: string) => Promise<void> }) {
   const [activeStatus, setActiveStatus] = useState<string>('all');
   const filters = ['all', 'pending', 'paid', 'cancelled', 'refunded'];
@@ -30,7 +52,7 @@ export function OrdersTable({ orders, onFilter }: { orders: AdminOrderList | nul
                 await onFilter(status === 'all' ? undefined : status);
               }}
             >
-              {status}
+              {statusLabels[status] || status}
             </Button>
           ))}
         </div>
@@ -58,9 +80,9 @@ export function OrdersTable({ orders, onFilter }: { orders: AdminOrderList | nul
                   </Link>
                 </td>
                 <td className="px-2 py-3">{order.userNickname || order.userId}</td>
-                <td className="px-2 py-3">{order.type}</td>
-                <td className="px-2 py-3">{order.status}</td>
-                <td className="px-2 py-3">{order.paymentChannel || '-'}</td>
+                <td className="px-2 py-3">{typeLabels[order.type] || order.type}</td>
+                <td className="px-2 py-3">{statusLabels[order.status] || order.status}</td>
+                <td className="px-2 py-3">{channelLabels[order.paymentChannel || ''] || order.paymentChannel || '-'}</td>
                 <td className="px-2 py-3 font-semibold">¥{order.amount.toFixed(2)}</td>
                 <td className="px-2 py-3 text-muted-foreground">{formatDate(order.createdAt)}</td>
               </tr>

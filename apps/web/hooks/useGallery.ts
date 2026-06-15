@@ -94,7 +94,12 @@ async function hydrateGalleryStory(storyId: string): Promise<GalleryStory> {
   };
 }
 
-export function useGallery(): UseGalleryState & UseGalleryActions {
+interface UseGalleryOptions {
+  autoLoad?: boolean;
+}
+
+export function useGallery(options: UseGalleryOptions = {}): UseGalleryState & UseGalleryActions {
+  const { autoLoad = true } = options;
   const [stories, setStories] = useState<GalleryStory[]>([]);
   const [allStories, setAllStories] = useState<GalleryStory[]>([]);
   const [story, setStory] = useState<GalleryStory | null>(null);
@@ -363,8 +368,10 @@ export function useGallery(): UseGalleryState & UseGalleryActions {
   }, [stopPolling]);
 
   useEffect(() => {
-    loadStories(1);
-  }, [loadStories]);
+    if (autoLoad) {
+      loadStories(1);
+    }
+  }, [autoLoad, loadStories]);
 
   return {
     stories,

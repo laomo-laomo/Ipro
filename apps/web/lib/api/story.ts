@@ -327,6 +327,10 @@ export async function getStories(): Promise<Story[]> {
     headers: jsonHeaders(),
   });
 
+  if (response.status === 401) {
+    throw new Error('请先登录后查看作品');
+  }
+
   const result: ApiResponse<ApiStory[]> = await response.json();
   if (!result.success) {
     throw new Error(result.message || '获取故事列表失败');

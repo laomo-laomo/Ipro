@@ -1,16 +1,23 @@
 // Membership types
 
-export type MembershipTier = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+export type MembershipTier = 'points' | 'times' | 'times1' | 'times10' | 'times50' | 'times100' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+
+export type MembershipType = 'points' | 'card';
 
 export interface MembershipPlan {
   id: MembershipTier;
   name: string;
+  type: MembershipType;
   originalPrice: number;
   price: number;
   periodDays: number;
   features: string[];
   popular?: boolean;
   pricePerDay: number;
+  maxScenes?: number;
+  dailyStoryLimit?: number;
+  pointsPerYuan?: number;
+  pointsPerScene?: number;
 }
 
 export interface MembershipStatus {
@@ -19,6 +26,10 @@ export interface MembershipStatus {
   expiresAt: string | null;
   remainingQuota: number;
   totalQuota: number;
+  maxScenes: number | null;
+  dailyStoryLimit: number | null;
+  todayStoryCount: number;
+  userPoints: number;
 }
 
 export interface RedeemResult {
@@ -33,6 +44,10 @@ export interface RedeemResult {
     remainingQuota: number;
     expiresAt: string | null;
     cardType: string | null;
+    maxScenes: number | null;
+    dailyStoryLimit: number | null;
+    todayStoryCount: number;
+    userPoints: number;
     isWarning: boolean;
     warningMessage: string | null;
   };
@@ -55,64 +70,174 @@ export interface ApiResponse<T> {
 
 // Membership plans configuration
 export const MEMBERSHIP_PLANS: MembershipPlan[] = [
+  // === 积分制 ===
+  {
+    id: 'points',
+    name: '积分充值',
+    type: 'points',
+    originalPrice: 0,
+    price: 10,
+    periodDays: 3650,
+    pricePerDay: 0,
+    pointsPerYuan: 100,
+    pointsPerScene: 10,
+    features: [
+      '按页扣费，用多少付多少',
+      '每页10积分（约0.1元）',
+      '无每日数量限制',
+      '支持所有功能',
+    ],
+  },
+  // === 次卡 ===
+  {
+    id: 'times',
+    name: '1次卡',
+    type: 'card',
+    originalPrice: 0,
+    price: 9.9,
+    periodDays: 3650,
+    pricePerDay: 0,
+    maxScenes: 20,
+    features: [
+      '1次创作机会',
+      '每个故事最多20页',
+      '生成故事绘本',
+      '生成视频',
+    ],
+  },
+  {
+    id: 'times1',
+    name: '1次卡',
+    type: 'card',
+    originalPrice: 0,
+    price: 9.9,
+    periodDays: 3650,
+    pricePerDay: 0,
+    maxScenes: 20,
+    features: [
+      '1次创作机会',
+      '每个故事最多20页',
+      '生成故事绘本',
+      '生成视频',
+    ],
+  },
+  {
+    id: 'times10',
+    name: '10次卡',
+    type: 'card',
+    originalPrice: 0,
+    price: 89,
+    periodDays: 3650,
+    pricePerDay: 0,
+    maxScenes: 20,
+    features: [
+      '10次创作机会',
+      '每个故事最多20页',
+      '生成故事绘本',
+      '生成视频',
+    ],
+  },
+  {
+    id: 'times50',
+    name: '50次卡',
+    type: 'card',
+    originalPrice: 0,
+    price: 399,
+    periodDays: 3650,
+    pricePerDay: 0,
+    maxScenes: 20,
+    popular: true,
+    features: [
+      '50次创作机会',
+      '每个故事最多20页',
+      '生成故事绘本',
+      '生成视频',
+    ],
+  },
+  {
+    id: 'times100',
+    name: '100次卡',
+    type: 'card',
+    originalPrice: 0,
+    price: 699,
+    periodDays: 3650,
+    pricePerDay: 0,
+    maxScenes: 20,
+    features: [
+      '100次创作机会',
+      '每个故事最多20页',
+      '生成故事绘本',
+      '生成视频',
+    ],
+  },
+  // === 周期卡 ===
   {
     id: 'weekly',
     name: '周卡',
+    type: 'card',
     originalPrice: 0,
     price: 19.9,
     periodDays: 7,
     pricePerDay: 2.84,
+    maxScenes: 20,
+    dailyStoryLimit: 5,
     features: [
-      '7天内无限使用',
+      '7天内每天5个故事',
+      '每个故事最多20页',
       '生成故事绘本',
       '生成视频',
-      '基础客服支持',
     ],
   },
   {
     id: 'monthly',
     name: '月卡',
+    type: 'card',
     originalPrice: 0,
     price: 59,
     periodDays: 30,
     pricePerDay: 1.97,
+    maxScenes: 20,
+    dailyStoryLimit: 5,
     features: [
-      '30天内无限使用',
+      '30天内每天5个故事',
+      '每个故事最多20页',
       '生成故事绘本',
       '生成视频',
-      '优先客服支持',
     ],
   },
   {
     id: 'quarterly',
     name: '季卡',
+    type: 'card',
     originalPrice: 0,
     price: 159,
     periodDays: 90,
     pricePerDay: 1.77,
+    maxScenes: 20,
+    dailyStoryLimit: 5,
     popular: true,
     features: [
-      '90天内无限使用',
+      '90天内每天5个故事',
+      '每个故事最多20页',
       '生成故事绘本',
       '生成视频',
-      '优先客服支持',
-      '专属主题推荐',
     ],
   },
   {
     id: 'yearly',
     name: '年卡',
+    type: 'card',
     originalPrice: 0,
     price: 499,
     periodDays: 365,
     pricePerDay: 1.37,
+    maxScenes: 20,
+    dailyStoryLimit: 5,
     features: [
-      '365天内无限使用',
+      '365天内每天5个故事',
+      '每个故事最多20页',
       '生成故事绘本',
       '生成视频',
-      '专属客服支持',
-      '专属主题推荐',
-      '专属素材包',
     ],
   },
 ];

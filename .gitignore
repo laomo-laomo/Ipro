@@ -94,5 +94,4 @@ styles-*.json
 styles-*.txt
 scratch-*.json
 # Test artifacts
-test_output.pdf
 .tmp-write-test.txt

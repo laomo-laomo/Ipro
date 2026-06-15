@@ -11,6 +11,7 @@ import { FadeIn, StaggerItem, StaggerList } from '@/components/motion';
 import { useGallery } from '@/hooks/useGallery';
 import { useCharacter } from '@/hooks/useCharacter';
 import { useToast } from '@/components/ui/toast';
+import { useAuthContext } from '@/providers/AuthProvider';
 
 type TabKey = 'home' | 'characters' | 'books' | 'videos';
 
@@ -22,14 +23,19 @@ const TABS: { key: TabKey; label: string; icon: typeof User; description: string
 
 export default function GalleryPage() {
   const router = useRouter();
-  const { stories, allStories, isLoading, isLoadingMore, error, hasMore, loadStories, loadMoreStories, deleteStory } = useGallery();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuthContext();
+  const { stories, allStories, isLoading, isLoadingMore, error, hasMore, loadStories, loadMoreStories, deleteStory } = useGallery({
+    autoLoad: isAuthenticated,
+  });
   const { characters, loadCharacters, removeCharacter } = useCharacter();
   const { success: showToast, error: showError } = useToast();
   const [activeTab, setActiveTab] = useState<TabKey>('home');
 
   useEffect(() => {
-    loadCharacters();
-  }, [loadCharacters]);
+    if (isAuthenticated) {
+      loadCharacters();
+    }
+  }, [isAuthenticated, loadCharacters]);
 
   const handleDelete = useCallback(async (storyId: string) => {
     try {
@@ -52,6 +58,10 @@ export default function GalleryPage() {
     router.push('/create/upload');
   }, [router]);
 
+  const handleLogin = useCallback(() => {
+    router.push('/login');
+  }, [router]);
+
   const styledCharacters = characters.filter((character) => character.stylizedPhotoUrl);
 
   // Filter applied to the full set — these are used to drive the home tab counts so
@@ -71,6 +81,37 @@ export default function GalleryPage() {
   // For the in-tab list view, use the loaded subset so "加载更多" actually appends.
   const readableStories = stories.filter(isReadableStory);
   const storiesWithVideo = stories.filter(hasVideo);
+
+  if (isAuthLoading) {
+    return (
+      <div className="page-shell page-enter space-y-5 md:space-y-8">
+        <StoryGridSkeleton />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="page-shell page-enter space-y-5 md:space-y-8">
+        <FadeIn>
+          <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between md:gap-5">
+            <div>
+              <p className="text-sm font-medium text-violet-700">我的作品</p>
+              <h1 className="mt-2 text-3xl font-bold leading-tight md:text-4xl">登录后查看你的作品</h1>
+            </div>
+          </section>
+        </FadeIn>
+
+        <FadeIn>
+          <GlassCard className="mx-auto max-w-md p-8 text-center md:p-10">
+            <BookImage className="mx-auto h-12 w-12 text-muted-foreground" />
+            <p className="mt-4 text-muted-foreground">你的角色、绘本和视频会保存在账号里。</p>
+            <MagicButton onClick={handleLogin} className="mt-5">去登录</MagicButton>
+          </GlassCard>
+        </FadeIn>
+      </div>
+    );
+  }
 
   if (activeTab === 'characters') {
     return (

@@ -19,25 +19,44 @@ const ADMIN_NAV = [
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, isLoading, logout } = useAuthContext();
-  // Defer the auth-driven branch to after mount so SSR and the first client
-  // render paint identical markup, avoiding the hydration mismatch on the
-  // admin shell (which kept swapping between the loading screen and the
-  // children when localStorage became available mid-hydration).
+  const auth = useAuthContext();
   const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  if (!mounted || isLoading) {
+  // 登录页不需要认证检查，直接渲染
+  const isLoginPage = pathname === '/admin/login';
+  const isWechatLogin = pathname === '/admin/wechat-login';
+
+  if (isLoginPage || isWechatLogin) {
+    return (
+      <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(253,224,71,0.22),_transparent_32%),linear-gradient(180deg,#fffaf2_0%,#f8f7ff_100%)] text-foreground">
+        <main>{children}</main>
+      </div>
+    );
+  }
+
+  // 等待客户端挂载完成
+  if (!mounted) {
     return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">正在加载管理员空间...</div>;
   }
 
-  if (!user || user.role !== 'admin') {
-    if (typeof window !== 'undefined') {
-      const next = encodeURIComponent(pathname || '/admin');
-      router.replace(`/admin/login?redirect=${next}`);
-    }
+  // 加载中
+  if (auth.isLoading) {
+    return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">正在验证身份...</div>;
+  }
+
+  // 未登录：直接跳转登录页
+  if (!auth.user) {
+    const next = encodeURIComponent(pathname || '/admin');
+    router.replace(`/admin/login?redirect=${next}`);
+    return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">正在跳转登录...</div>;
+  }
+
+  // 已登录但非管理员：显示权限不足
+  if (auth.user.role !== 'admin') {
     return (
       <div className="flex min-h-screen items-center justify-center px-4">
         <div className="max-w-md rounded-[28px] border border-white/70 bg-white/90 p-8 text-center shadow-paper">
@@ -46,7 +65,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <p className="mt-3 text-sm leading-7 text-muted-foreground">当前账号没有管理员权限，请确认数据库中的用户 `role` 已设置为 `admin`。</p>
           <div className="mt-6 flex justify-center gap-3">
             <Button variant="outline" onClick={() => router.push('/')}>返回首页</Button>
-            <Button onClick={() => logout()}>退出登录</Button>
+            <Button onClick={() => auth.logout()}>退出登录</Button>
           </div>
         </div>
       </div>
@@ -63,7 +82,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </span>
             <div>
               <p className="text-sm font-medium text-violet-700">Admin Console</p>
-              <p className="text-xs text-muted-foreground">{user.nickname || '管理员'}</p>
+              <p className="text-xs text-muted-foreground">{auth.user.nickname || '管理员'}</p>
             </div>
           </div>
 
@@ -87,7 +106,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             })}
           </nav>
 
-          <Button variant="outline" onClick={() => logout()} className="mt-6 w-full rounded-full">
+          <Button variant="outline" onClick={() => auth.logout()} className="mt-6 w-full rounded-full">
             <LogOut className="h-4 w-4" />
             退出登录
           </Button>

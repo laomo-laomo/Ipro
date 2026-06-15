@@ -155,29 +155,55 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
         if (!isQueueUnavailable(queueErr)) {
           throw queueErr;
         }
-        // No Redis — run the pipeline synchronously inside this request.
-        // For an 8-幕绘本 (TTS + ffmpeg) the wall clock is ~30-60s, which is
-        // acceptable in dev. The route still returns 200 with the finished
-        // video so clients (App / 微信小程序) get a single response.
+        // No Redis — run the pipeline in the background (fire-and-forget) so
+        // the route returns immediately with status='processing'. This avoids
+        // 60s+ blocking requests that exceed the 微信小程序 / App client
+        // timeout. Clients poll GET /api/stories/:id/video to pick up the
+        // final result.
         request.log.warn(
           { videoId, storyId },
-          '[Video] Redis unavailable, running pipeline inline',
+          '[Video] Redis unavailable, running pipeline in background (fire-and-forget)',
         );
-        const result = await processVideoJobInline(jobData);
-        if (!result.success) {
-          return reply.status(500).send({
-            success: false,
-            message: result.error,
-            code: 'VIDEO_ERROR',
+        // 立即把 status 标记成 processing, 让前端 polling 能看到状态
+        try {
+          await prisma.video.update({
+            where: { id: videoId },
+            data: { status: 'processing', message: '正在渲染视频...' },
           });
+        } catch (e) {
+          request.log.warn({ err: e }, '[Video] failed to mark processing');
         }
-        inlineResult = {
-          videoUrl: result.videoUrl,
-          audioUrl: result.audioUrl,
-          duration: result.metadata?.duration,
-          resolution: result.metadata?.resolution,
-          fileSize: result.metadata?.fileSize,
-        };
+        setImmediate(() => {
+          processVideoJobInline(jobData).then((result) => {
+            if (!result.success) {
+              request.log.error({ err: result.error, videoId }, '[Video] background pipeline failed');
+              prisma.video.update({
+                where: { id: videoId },
+                data: { status: 'failed', errorMessage: result.error || '渲染失败' },
+              }).catch(() => {});
+            } else {
+              request.log.info({ videoId, videoUrl: result.videoUrl }, '[Video] background pipeline done');
+            }
+          }).catch((err) => {
+            request.log.error({ err, videoId }, '[Video] background pipeline crashed');
+            prisma.video.update({
+              where: { id: videoId },
+              data: { status: 'failed', errorMessage: String(err?.message || err) },
+            }).catch(() => {});
+          });
+        });
+        // 立即返 202 + processing, 不阻塞微信小程序
+        return reply.status(202).send({
+          success: true,
+          data: {
+            videoId,
+            jobId: null,
+            status: 'processing',
+            charCount,
+            estimatedCost,
+            asyncPipeline: true,
+          },
+        });
       }
 
       if (inlineResult) {

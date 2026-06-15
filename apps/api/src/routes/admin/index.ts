@@ -2,7 +2,6 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../../config/database.js';
 import { getAllPrices, updatePrice } from '../../services/price.service.js';
-import { adminMiddleware } from '../../middlewares/admin.middleware.js';
 
 
 // Request schemas
@@ -15,8 +14,10 @@ const createRedeemCodesSchema = z.object({
   rewardType: z.enum(['points', 'membership']),
   count: z.number().int().min(1).max(200),
   pointsAmount: z.number().int().positive().optional(),
-  membershipTier: z.enum(['weekly', 'monthly', 'quarterly', 'yearly']).optional(),
-  expiresAt: z.string().datetime().optional(),
+  membershipTier: z.enum(['times', 'times1', 'times10', 'times50', 'times100', 'weekly', 'monthly', 'quarterly', 'yearly']).optional(),
+  expiresAt: z.string().refine((value) => !Number.isNaN(Date.parse(value)), {
+    message: 'expiresAt must be a valid date time',
+  }).optional(),
   note: z.string().max(200).optional(),
 }).superRefine((data, ctx) => {
   if (data.rewardType === 'points' && !data.pointsAmount) {
@@ -40,7 +41,7 @@ const grantPointsSchema = z.object({
 });
 
 const grantMembershipSchema = z.object({
-  cardType: z.enum(['weekly', 'monthly', 'quarterly', 'yearly']),
+  cardType: z.enum(['times', 'times1', 'times10', 'times50', 'times100', 'weekly', 'monthly', 'quarterly', 'yearly']),
   quota: z.number().int().positive().max(100000),
   days: z.number().int().positive().max(3650),
 });
@@ -58,9 +59,6 @@ function randomRedeemCode(length = 12): string {
  * Admin routes - All endpoints require admin role
  */
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
-  // Apply admin middleware to all routes in this plugin
-  app.addHook('preHandler', adminMiddleware);
-
   /**
    * GET /api/admin/prices - Get price configuration
    */
@@ -574,6 +572,11 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           rewardType: body.rewardType,
           count: created.length,
           codes: created.map((item) => item.code),
+          batchTimestamp: new Date().toISOString(),
+          pointsAmount: body.rewardType === 'points' ? body.pointsAmount : null,
+          membershipTier: body.rewardType === 'membership' ? body.membershipTier : null,
+          expiresAt: body.expiresAt || null,
+          note: body.note || null,
         },
       });
     } catch (error: any) {
@@ -688,10 +691,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (code.status === 'used') {
+      if (code.status !== 'active' || code.usedAt || code.usedByUserId) {
         return reply.status(400).send({
           success: false,
-          message: 'Used redeem codes cannot be disabled',
+          message: '只有未使用且未作废的兑换码可以作废',
           code: 'INVALID_STATE',
         });
       }

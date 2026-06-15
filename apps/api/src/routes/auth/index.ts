@@ -84,7 +84,7 @@ export async function authRoutes(fastify: FastifyInstance) {
   // Dev mode: auto-login for /me and /refresh endpoints
   // Dev mode: set request.user directly; getCurrentUserData handles it without JWT
   const devAutoLogin = async (request: FastifyRequest) => {
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.NODE_ENV !== 'production' && process.env.DEV_AUTO_LOGIN === 'true') {
       const devUser = await getOrCreateDevUser();
       await ensureDevMembership(devUser.id);
       request.user = { id: devUser.id, role: devUser.role };

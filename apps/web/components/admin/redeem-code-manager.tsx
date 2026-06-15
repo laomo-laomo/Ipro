@@ -1,12 +1,96 @@
 'use client';
 
 import { useState } from 'react';
-import { Ban, Copy, TicketPercent } from 'lucide-react';
+import { Ban, Copy, Download, TicketPercent } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { GlassCard } from '@/components/magic';
 import type { AdminRedeemCodeCreateResult, AdminRedeemCodeFilters, AdminRedeemCodeList } from '@/types/admin';
 import { formatDate } from '@/lib/utils/date';
+
+function formatBatchTimestamp(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  const pad = (num: number) => String(num).padStart(2, '0');
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+  ].join('') + '-' + [
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join('');
+}
+
+function sanitizeFileName(value: string) {
+  return value
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'redeem-codes';
+}
+
+function csvCell(value: string | number | null | undefined) {
+  const text = value == null ? '' : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function downloadCsv(result: AdminRedeemCodeCreateResult) {
+  const timestamp = formatBatchTimestamp(result.batchTimestamp);
+  const baseName = sanitizeFileName(`${result.note || '兑换码'}-${timestamp}`);
+  const reward = result.rewardType === 'points'
+    ? `${result.pointsAmount || 0} 积分`
+    : `${result.membershipTier ? membershipTierLabels[result.membershipTier] : '-'} 会员`;
+  const rows = [
+    ['兑换码', '类型', '奖励', '状态', '过期时间', '备注', '批次时间'],
+    ...result.codes.map((code) => [
+      code,
+      rewardTypeLabels[result.rewardType] || result.rewardType,
+      reward,
+      '未使用',
+      result.expiresAt || '',
+      result.note || '',
+      result.batchTimestamp,
+    ]),
+  ];
+  const csv = `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`;
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${baseName}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+const statusLabels: Record<string, string> = {
+  active: '未使用',
+  used: '已使用',
+  expired: '已过期',
+  disabled: '已作废',
+};
+
+const rewardTypeLabels: Record<string, string> = {
+  membership: '会员卡',
+  points: '积分',
+};
+
+const membershipTierLabels: Record<string, string> = {
+  times: '1次卡',
+  times1: '1次卡',
+  times10: '10次卡',
+  times50: '50次卡',
+  times100: '100次卡',
+  weekly: '周卡',
+  monthly: '月卡',
+  quarterly: '季卡',
+  yearly: '年卡',
+};
 
 export function RedeemCodeManager({
   onCreate,
@@ -20,7 +104,7 @@ export function RedeemCodeManager({
     rewardType: 'points' | 'membership';
     count: number;
     pointsAmount?: number;
-    membershipTier?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+    membershipTier?: 'times1' | 'times10' | 'times50' | 'times100' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
     expiresAt?: string;
     note?: string;
   }) => Promise<AdminRedeemCodeCreateResult>;
@@ -33,7 +117,7 @@ export function RedeemCodeManager({
   const [rewardType, setRewardType] = useState<'points' | 'membership'>('membership');
   const [count, setCount] = useState('10');
   const [pointsAmount, setPointsAmount] = useState('100');
-  const [membershipTier, setMembershipTier] = useState<'weekly' | 'monthly' | 'quarterly' | 'yearly'>('monthly');
+  const [membershipTier, setMembershipTier] = useState<'times1' | 'times10' | 'times50' | 'times100' | 'weekly' | 'monthly' | 'quarterly' | 'yearly'>('times1');
   const [expiresAt, setExpiresAt] = useState('');
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,12 +130,13 @@ export function RedeemCodeManager({
     setIsSubmitting(true);
     setError(null);
     try {
+      const normalizedExpiresAt = expiresAt ? new Date(expiresAt).toISOString() : undefined;
       await onCreate({
         rewardType,
         count: Number(count),
         pointsAmount: rewardType === 'points' ? Number(pointsAmount) : undefined,
         membershipTier: rewardType === 'membership' ? membershipTier : undefined,
-        expiresAt: expiresAt || undefined,
+        expiresAt: normalizedExpiresAt,
         note: note || undefined,
       });
     } catch (err) {
@@ -70,7 +155,7 @@ export function RedeemCodeManager({
           </span>
           <div>
             <h2 className="text-xl font-bold">批量生成兑换码</h2>
-            <p className="text-sm text-muted-foreground">支持积分码，以及月卡、季卡、年卡会员兑换码。</p>
+            <p className="text-sm text-muted-foreground">支持积分码、1/10/50/100 次卡，以及周卡、月卡、季卡、年卡。</p>
           </div>
         </div>
 
@@ -96,11 +181,19 @@ export function RedeemCodeManager({
           ) : (
             <label className="space-y-2 text-sm">
               <span className="font-medium">会员档位</span>
-              <select value={membershipTier} onChange={(e) => setMembershipTier(e.target.value as 'weekly' | 'monthly' | 'quarterly' | 'yearly')} className="h-11 w-full rounded-full border border-input bg-white/85 px-4 text-sm">
+              <select value={membershipTier} onChange={(e) => setMembershipTier(e.target.value as 'times1' | 'times10' | 'times50' | 'times100' | 'weekly' | 'monthly' | 'quarterly' | 'yearly')} className="h-11 w-full rounded-full border border-input bg-white/85 px-4 text-sm">
+                <optgroup label="次卡">
+                  <option value="times1">1次卡</option>
+                  <option value="times10">10次卡</option>
+                  <option value="times50">50次卡</option>
+                  <option value="times100">100次卡</option>
+                </optgroup>
+                <optgroup label="时长卡">
+                <option value="weekly">周卡</option>
                 <option value="monthly">月卡</option>
                 <option value="quarterly">季卡</option>
                 <option value="yearly">年卡</option>
-                <option value="weekly">周卡</option>
+                </optgroup>
               </select>
             </label>
           )}
@@ -125,15 +218,26 @@ export function RedeemCodeManager({
 
       {lastCreatedCodes && (
         <GlassCard className="p-5 md:p-6">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-lg font-bold">最新生成结果</h3>
-              <p className="text-sm text-muted-foreground">共生成 {lastCreatedCodes.count} 个兑换码</p>
+              <p className="text-sm text-muted-foreground">
+                共生成 {lastCreatedCodes.count} 个兑换码 · 批次 {formatBatchTimestamp(lastCreatedCodes.batchTimestamp)}
+              </p>
+              {lastCreatedCodes.note && (
+                <p className="mt-1 text-xs text-muted-foreground">备注：{lastCreatedCodes.note}</p>
+              )}
             </div>
-            <Button variant="outline" className="rounded-full" onClick={() => navigator.clipboard.writeText(lastCreatedCodes.codes.join('\n'))}>
-              <Copy className="h-4 w-4" />
-              复制全部
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" className="rounded-full" onClick={() => navigator.clipboard.writeText(lastCreatedCodes.codes.join('\n'))}>
+                <Copy className="h-4 w-4" />
+                复制全部
+              </Button>
+              <Button variant="outline" className="rounded-full" onClick={() => downloadCsv(lastCreatedCodes)}>
+                <Download className="h-4 w-4" />
+                导出表格
+              </Button>
+            </div>
           </div>
 
           <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -154,15 +258,15 @@ export function RedeemCodeManager({
           <Input value={search} onChange={(e) => setSearch(e.target.value.toUpperCase())} placeholder="搜索兑换码" className="h-11 rounded-full bg-white/85 px-4" />
           <select value={statusFilter || ''} onChange={(e) => setStatusFilter((e.target.value || undefined) as AdminRedeemCodeFilters['status'])} className="h-11 rounded-full border border-input bg-white/85 px-4 text-sm">
             <option value="">全部状态</option>
-            <option value="active">active</option>
-            <option value="used">used</option>
-            <option value="expired">expired</option>
-            <option value="disabled">disabled</option>
+            <option value="active">未使用</option>
+            <option value="used">已使用</option>
+            <option value="expired">已过期</option>
+            <option value="disabled">已作废</option>
           </select>
           <select value={rewardTypeFilter || ''} onChange={(e) => setRewardTypeFilter((e.target.value || undefined) as AdminRedeemCodeFilters['rewardType'])} className="h-11 rounded-full border border-input bg-white/85 px-4 text-sm">
             <option value="">全部类型</option>
-            <option value="membership">membership</option>
-            <option value="points">points</option>
+            <option value="membership">会员卡</option>
+            <option value="points">积分</option>
           </select>
           <Button className="h-11 rounded-full" onClick={() => onSearch({ search, status: statusFilter, rewardType: rewardTypeFilter, offset: 0, limit: filters.limit || 50 })}>
             筛选
@@ -186,14 +290,20 @@ export function RedeemCodeManager({
               {redeemCodes?.codes.map((item) => (
                 <tr key={item.id} className="border-b border-white/50">
                   <td className="px-2 py-3 font-mono text-xs">{item.code}</td>
-                  <td className="px-2 py-3">{item.rewardType}</td>
-                  <td className="px-2 py-3">{item.rewardType === 'points' ? `${item.pointsAmount || 0} 积分` : `${item.membershipTier || '-'} 会员`}</td>
-                  <td className="px-2 py-3">{item.status}</td>
+                  <td className="px-2 py-3">{rewardTypeLabels[item.rewardType] || item.rewardType}</td>
+                  <td className="px-2 py-3">{item.rewardType === 'points' ? `${item.pointsAmount || 0} 积分` : `${item.membershipTier ? membershipTierLabels[item.membershipTier] : '-'} 会员`}</td>
+                  <td className="px-2 py-3">{statusLabels[item.status] || item.status}</td>
                   <td className="px-2 py-3">{item.usedByUser?.nickname || item.usedByUser?.phone || '-'}</td>
                   <td className="px-2 py-3 text-muted-foreground">{formatDate(item.createdAt)}</td>
                   <td className="px-2 py-3">
                     {item.status === 'active' ? (
-                      <Button variant="outline" size="sm" className="rounded-full" onClick={() => onDisable(item.id)}>
+                      <Button variant="outline" size="sm" className="rounded-full" onClick={async () => {
+                        try {
+                          await onDisable(item.id);
+                        } catch {
+                          // Error is handled by useAdmin hook
+                        }
+                      }}>
                         <Ban className="h-4 w-4" />
                         作废
                       </Button>

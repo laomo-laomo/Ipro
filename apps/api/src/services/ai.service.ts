@@ -915,7 +915,7 @@ const content = (story.content || '').trim();
   }
 
   const badEndingPatterns = [
-    /["“‘（【《]$/,
+    /[""''（【《]$/,
     /[，、：；,\-]\s*$/,
     /我们再去帮助别人\s*$/,
     /未完\s*$/,
@@ -926,11 +926,12 @@ const content = (story.content || '').trim();
     return false;
   }
 
-  // Require at least 3 scenes and a complete arc (opening + development + ending).
-  // The hard "≥ 6 scenes" floor is gone — instead, the prompt asks the LLM to
-  // first enumerate the story's key beats and only then decide scene count, so
-  // a 4-5 scene short is acceptable as long as it covers the canonical beats.
-  if (!Array.isArray(story.storyboard.scenes) || story.storyboard.scenes.length < 3) {
+  // Require at least 5 scenes for a proper picture-book arc. A fairy tale
+  // typically has 6-9 key beats (opening → conflict → climax → resolution).
+  // Stories with only 3-4 scenes are almost always truncated LLM output that
+  // skipped canonical events. Raise the floor from 3 to 5 so the retry loop
+  // catches incomplete outputs while still allowing genuinely short stories.
+  if (!Array.isArray(story.storyboard.scenes) || story.storyboard.scenes.length < 5) {
     return false;
   }
 

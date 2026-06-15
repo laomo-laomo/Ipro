@@ -1,14 +1,14 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../../config/database.js';
-import { MEMBERSHIP_PLANS } from '../../config/membership.js';
+import { MEMBERSHIP_MAX_SCENES, MEMBERSHIP_PLANS, type MembershipTier } from '../../config/membership.js';
 import { createMembershipOrder } from '../../services/payment.service.js';
 import { getQuotaStatus } from '../../services/membership.service.js';
 import { redeemCode } from '../../services/redeem.service.js';
 
 
 const purchaseSchema = z.object({
-  cardType: z.enum(['weekly', 'monthly', 'quarterly', 'yearly']),
+  cardType: z.enum(['times', 'times1', 'times10', 'times50', 'times100', 'weekly', 'monthly', 'quarterly', 'yearly']),
   channel: z.enum(['wechat', 'alipay', 'stripe']).optional().default('wechat'),
 });
 
@@ -37,6 +37,7 @@ export async function membershipRoutes(app: FastifyInstance): Promise<void> {
             expiresAt: null,
             remainingQuota: 0,
             totalQuota: 0,
+            maxScenes: null,
           },
         });
       }
@@ -60,20 +61,23 @@ export async function membershipRoutes(app: FastifyInstance): Promise<void> {
             expiresAt: null,
             remainingQuota: 0,
             totalQuota: 0,
+            maxScenes: null,
           },
         });
       }
 
-      const remainingQuota = Math.max(0, membership.quota - membership.usedQuota);
+      const remainingQuota = membership.quota === 0 ? 9999 : Math.max(0, membership.quota - membership.usedQuota);
+      const maxScenes = MEMBERSHIP_MAX_SCENES[membership.cardType as MembershipTier] ?? null;
 
       return reply.send({
         success: true,
         data: {
           isActive: true,
-          tier: membership.cardType as 'weekly' | 'monthly' | 'quarterly' | 'yearly',
+          tier: membership.cardType,
           expiresAt: membership.expiresAt.toISOString(),
           remainingQuota,
           totalQuota: membership.quota,
+          maxScenes,
         },
       });
     } catch (error: any) {
@@ -106,6 +110,7 @@ export async function membershipRoutes(app: FastifyInstance): Promise<void> {
             cardType: null,
             isWarning: false,
             warningMessage: null,
+            maxScenes: null,
           },
         });
       }

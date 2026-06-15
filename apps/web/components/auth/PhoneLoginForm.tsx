@@ -99,13 +99,13 @@ export function PhoneLoginForm({ onSuccess, onError, hideTestShortcut = false }:
   return (
     <div className="space-y-4">
       {!hideTestShortcut && (
-        <Button type="button" variant="outline" onClick={fillTestAccount} className="w-full border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white">
+        <Button type="button" variant="outline" onClick={fillTestAccount} className="w-full">
           一键填入测试账号
         </Button>
       )}
 
       <div className="space-y-2">
-        <label htmlFor="phone" className="text-sm font-medium text-white/85">
+        <label htmlFor="phone" className="text-sm font-medium text-gray-700">
           手机号
         </label>
         <Input
@@ -115,12 +115,12 @@ export function PhoneLoginForm({ onSuccess, onError, hideTestShortcut = false }:
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           maxLength={11}
-          className="h-11 border-white/20 bg-white/10 text-white placeholder:text-white/40"
+          className="h-11"
         />
       </div>
 
       <div className="space-y-2">
-        <label htmlFor="code" className="text-sm font-medium text-white/85">
+        <label htmlFor="code" className="text-sm font-medium text-gray-700">
           验证码
         </label>
         <div className="flex gap-2">
@@ -131,9 +131,9 @@ export function PhoneLoginForm({ onSuccess, onError, hideTestShortcut = false }:
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
             maxLength={6}
-            className="h-11 flex-1 border-white/20 bg-white/10 text-white placeholder:text-white/40"
+            className="h-11 flex-1"
           />
-          <Button type="button" variant="outline" onClick={handleSendCode} disabled={isSendingCode || countdown > 0} className="h-11 min-w-[112px] border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white">
+          <Button type="button" variant="outline" onClick={handleSendCode} disabled={isSendingCode || countdown > 0} className="h-11 min-w-[112px]">
             {countdown > 0 ? `${countdown}s` : isSendingCode ? '发送中...' : '获取验证码'}
           </Button>
         </div>

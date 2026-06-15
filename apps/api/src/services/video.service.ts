@@ -269,12 +269,12 @@ export async function tryReuseSceneAudio(
       if (url.startsWith('/temp/')) {
         const localPath = join(process.cwd(), 'public', url.replace(/^\//, ''));
         if (!existsSync(localPath)) return null;
-        const buf = require('node:fs').readFileSync(localPath);
+        const buf = readFileSync(localPath);
         writeFileSync(dest, buf);
       } else if (url.startsWith('/uploads/')) {
         const localPath = join(process.cwd(), 'public', url.replace(/^\//, ''));
         if (!existsSync(localPath)) return null;
-        const buf = require('node:fs').readFileSync(localPath);
+        const buf = readFileSync(localPath);
         writeFileSync(dest, buf);
       } else {
         // Remote URL: download via fetch

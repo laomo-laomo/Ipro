@@ -40,14 +40,50 @@ export interface PhoneLoginResult {
 const WECHAT_API = {
   appId: process.env.WECHAT_APP_ID || '',
   appSecret: process.env.WECHAT_APP_SECRET || '',
+  miniProgramSessionUrl: 'https://api.weixin.qq.com/sns/jscode2session',
   accessTokenUrl: 'https://api.weixin.qq.com/sns/oauth2/access_token',
   userInfoUrl: 'https://api.weixin.qq.com/sns/userinfo',
 };
 
+interface WechatProfile {
+  openid: string;
+  nickname?: string;
+  avatar?: string;
+  unionid?: string;
+}
+
+async function getWechatMiniProgramProfile(code: string): Promise<WechatProfile> {
+  if (!WECHAT_API.appId || !WECHAT_API.appSecret) {
+    throw new Error('微信登录未配置 AppID 或 AppSecret');
+  }
+
+  const url = `${WECHAT_API.miniProgramSessionUrl}?appid=${WECHAT_API.appId}&secret=${WECHAT_API.appSecret}&js_code=${code}&grant_type=authorization_code`;
+  const response = await fetch(url, { method: 'GET' });
+  const data = await response.json() as {
+    errcode?: number;
+    errmsg?: string;
+    openid?: string;
+    unionid?: string;
+  };
+
+  if (data.errcode) {
+    throw new Error(`微信小程序登录失败: ${data.errmsg}`);
+  }
+
+  if (!data.openid) {
+    throw new Error('无法获取小程序 OpenID');
+  }
+
+  return {
+    openid: data.openid,
+    unionid: data.unionid,
+  };
+}
+
 /**
  * 获取微信网页授权用户信息
  */
-async function getWechatOAuthProfile(code: string): Promise<{ openid: string; nickname?: string; avatar?: string }> {
+async function getWechatOAuthProfile(code: string): Promise<WechatProfile> {
   if (!WECHAT_API.appId || !WECHAT_API.appSecret) {
     throw new Error('微信登录未配置 AppID 或 AppSecret');
   }
@@ -94,6 +130,7 @@ async function getWechatOAuthProfile(code: string): Promise<{ openid: string; ni
       if (!userInfo.errcode) {
         return {
           openid: data.openid,
+          unionid: data.unionid,
           nickname: userInfo.nickname,
           avatar: userInfo.headimgurl,
         };
@@ -103,7 +140,24 @@ async function getWechatOAuthProfile(code: string): Promise<{ openid: string; ni
     }
   }
 
-  return { openid: data.openid };
+  return { openid: data.openid, unionid: data.unionid };
+}
+
+async function getWechatProfile(code: string): Promise<WechatProfile> {
+  const preferMiniProgram = process.env.WECHAT_LOGIN_TYPE !== 'oauth';
+
+  if (preferMiniProgram) {
+    try {
+      return await getWechatMiniProgramProfile(code);
+    } catch (miniProgramError) {
+      if (process.env.WECHAT_LOGIN_TYPE === 'miniapp') {
+        throw miniProgramError;
+      }
+      return getWechatOAuthProfile(code);
+    }
+  }
+
+  return getWechatOAuthProfile(code);
 }
 
 /**
@@ -143,7 +197,7 @@ export async function wechatLogin(
         nickname: '微信联调用户',
         avatar: null,
       }
-    : await getWechatOAuthProfile(code);
+    : await getWechatProfile(code);
 
   // 查找或创建用户
   let user = await prisma.user.findUnique({

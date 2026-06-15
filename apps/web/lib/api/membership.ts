@@ -29,6 +29,10 @@ export async function getMembershipStatus(): Promise<MembershipStatus> {
       expiresAt: null,
       remainingQuota: 0,
       totalQuota: 0,
+      maxScenes: null,
+      dailyStoryLimit: null,
+      todayStoryCount: 0,
+      userPoints: 0,
     };
   } catch {
     // Return default status if not logged in or error
@@ -38,6 +42,10 @@ export async function getMembershipStatus(): Promise<MembershipStatus> {
       expiresAt: null,
       remainingQuota: 0,
       totalQuota: 0,
+      maxScenes: null,
+      dailyStoryLimit: null,
+      todayStoryCount: 0,
+      userPoints: 0,
     };
   }
 }

@@ -4,7 +4,17 @@ import { getQuotaStatus } from './membership.service.js';
 
 type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
-const MEMBERSHIP_TIERS = new Set<MembershipTier>(['weekly', 'monthly', 'quarterly', 'yearly']);
+const MEMBERSHIP_TIERS = new Set<MembershipTier>([
+  'times',
+  'times1',
+  'times10',
+  'times50',
+  'times100',
+  'weekly',
+  'monthly',
+  'quarterly',
+  'yearly',
+]);
 
 function isMembershipTier(value: string | null | undefined): value is MembershipTier {
   return Boolean(value && MEMBERSHIP_TIERS.has(value as MembershipTier));
@@ -39,7 +49,7 @@ async function redeemMembership(tx: TxClient, userId: string, tier: MembershipTi
       data: {
         cardType: tier,
         quota: activeMembership.quota + quotaToAdd,
-        expiresAt: nextExpiry,
+        expiresAt: nextExpiry > activeMembership.expiresAt ? nextExpiry : activeMembership.expiresAt,
         status: 'active',
       },
     });

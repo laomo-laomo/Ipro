@@ -14,7 +14,7 @@ import {
   checkAllIllustrationsCompleted,
 } from '../../services/illustration.service.js';
 import { illustrationQueue } from '../../services/queue.service.js';
-import { checkQuota } from '../../services/membership.service.js';
+import { checkQuota, getMaxScenesForUser } from '../../services/membership.service.js';
 import { prisma } from '../../config/database.js';
 import { normalizeStoryboard } from '../../types/storyboard.js';
 
@@ -148,6 +148,20 @@ export async function illustrationRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
+      // Check maxScenes limit for times card holders
+      const maxScenes = await getMaxScenesForUser(userId);
+      if (maxScenes !== null && targetSceneIndices.length > maxScenes) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`[Illustrate] Dev mode: bypassing maxScenes check (${targetSceneIndices.length} > ${maxScenes})`);
+        } else {
+          return reply.status(403).send({
+            success: false,
+            message: `次卡用户每个故事最多 ${maxScenes} 页，当前请求 ${targetSceneIndices.length} 页`,
+            code: 'MAX_SCENES_EXCEEDED',
+          });
+        }
+      }
+
       const { count, totalScenes } = await createIllustrationRecords(storyId, sceneIndicesToGenerate, { force });
 
       if (count === 0) {
@@ -207,11 +221,12 @@ export async function illustrationRoutes(app: FastifyInstance): Promise<void> {
           const generateOne = async (ill: typeof illustrations[number]) => {
             try {
               request.log.info(`[Illustrate] Generating scene ${ill.sceneIndex} with characterId=${characterId}`);
-              const result = await generateSceneIllustration(storyId, ill.sceneIndex, characterId);
-              await prisma.illustration.update({
-                where: { id: ill.id },
-                data: { imageUrl: result.imageUrl, prompt: result.prompt, status: 'completed', cost: result.cost },
-              });
+              // generateSceneIllustration already updates the Illustration row
+              // (status, imageUrl, prompt, cost, errorMessage, etc.). Do NOT
+              // overwrite it here — a second update would clobber fields like
+              // originalPrompt, failureCategory, and retryCount that the service
+              //精心记录.
+              await generateSceneIllustration(storyId, ill.sceneIndex, characterId);
               request.log.info(`[Illustrate] Scene ${ill.sceneIndex} completed`);
             } catch (genError: any) {
               const message = genError instanceof Error ? genError.message : String(genError);
@@ -493,6 +508,17 @@ export async function illustrationRoutes(app: FastifyInstance): Promise<void> {
         success: false,
         message: 'Illustration is already completed; pass force=true to regenerate.',
         code: 'ALREADY_COMPLETED',
+      });
+    }
+
+    // Guard against concurrent retries on the same scene. If another retry is
+    // already in flight (status='processing' with retryCount>0), reject this one
+    // to avoid duplicate AI calls that waste quota and may overwrite results.
+    if (illustration.status === 'processing' && illustration.retryCount > 0) {
+      return reply.status(409).send({
+        success: false,
+        message: 'Illustration is already being retried. Please wait.',
+        code: 'ALREADY_RETRYING',
       });
     }
 

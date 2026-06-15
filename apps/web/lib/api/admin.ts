@@ -88,7 +88,7 @@ export async function createAdminRedeemCodes(body: {
   rewardType: 'points' | 'membership';
   count: number;
   pointsAmount?: number;
-  membershipTier?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  membershipTier?: 'times1' | 'times10' | 'times50' | 'times100' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
   expiresAt?: string;
   note?: string;
 }): Promise<AdminRedeemCodeCreateResult> {
@@ -119,6 +119,7 @@ export async function disableAdminRedeemCode(id: string): Promise<void> {
   const response = await fetch(`${API_BASE}/api/admin/redeem-codes/${id}/disable`, {
     method: 'PATCH',
     headers: jsonHeaders(),
+    body: JSON.stringify({}),
   });
   const result: ApiResponse<{ id: string; status: string }> = await response.json();
   if (!result.success) {

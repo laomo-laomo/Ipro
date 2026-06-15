@@ -72,7 +72,7 @@ export function useAdmin() {
     rewardType: 'points' | 'membership';
     count: number;
     pointsAmount?: number;
-    membershipTier?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+    membershipTier?: 'times1' | 'times10' | 'times50' | 'times100' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
     expiresAt?: string;
     note?: string;
   }) => {
@@ -83,8 +83,13 @@ export function useAdmin() {
   }, [refreshRedeemCodes]);
 
   const disableCode = useCallback(async (id: string) => {
-    await disableAdminRedeemCode(id);
-    await refreshRedeemCodes();
+    try {
+      await disableAdminRedeemCode(id);
+      await refreshRedeemCodes();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '作废兑换码失败');
+      throw err;
+    }
   }, [refreshRedeemCodes]);
 
   useEffect(() => {

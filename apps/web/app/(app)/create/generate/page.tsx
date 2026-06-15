@@ -122,7 +122,7 @@ function GenerateContent() {
     }
     // 注意：成功时不在这里释放 isIllustrating 和 lockRef
     // 它们将在轮询检测到 completed/failed 时由下方 useEffect 重置
-  }, [character, isIllustrating, showError, refreshIllustrations, startIllustration, startProgressPolling, storyId]);
+  }, [character, isIllustrating, showError, refreshIllustrations, startIllustration, startProgressPolling, storyId, loadStory]);
 
   // 监听轮询进度，当完成或失败时重置生成状态
   useEffect(() => {

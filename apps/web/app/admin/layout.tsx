@@ -1,11 +1,16 @@
+'use client';
+
 import type { ReactNode } from 'react';
-import { AppShell } from '@/components/layout/app-shell';
+import { AuthProvider } from '@/providers/AuthProvider';
+import { ToastProvider } from '@/components/ui/toast';
 import { AdminShell } from '@/components/admin/admin-shell';
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <AppShell>
-      <AdminShell>{children}</AdminShell>
-    </AppShell>
+    <AuthProvider>
+      <ToastProvider>
+        <AdminShell>{children}</AdminShell>
+      </ToastProvider>
+    </AuthProvider>
   );
 }

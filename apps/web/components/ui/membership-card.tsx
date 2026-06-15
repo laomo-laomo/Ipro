@@ -53,7 +53,15 @@ export function MembershipCard({ plan, isCurrentPlan = false, onPurchase, isLoad
           <span className="text-4xl font-extrabold text-violet-700">¥{plan.price}</span>
           <span className="text-sm text-muted-foreground">/{plan.name}</span>
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">约 ¥{plan.pricePerDay.toFixed(2)}/天</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {plan.type === 'points'
+            ? `${plan.pointsPerScene}积分/页 · 无限制`
+            : plan.dailyStoryLimit
+              ? `每天${plan.dailyStoryLimit}个故事 · 最多${plan.maxScenes}页`
+              : plan.maxScenes
+                ? `一次购买 · 最多${plan.maxScenes}页`
+                : `约 ¥${plan.pricePerDay.toFixed(2)}/天`}
+        </p>
       </div>
 
       <ul className="mb-6 flex-1 space-y-3">
