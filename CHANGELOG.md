@@ -26,6 +26,13 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 
 ## Unreleased
 
+### 2026-06-14 22:30 +08:00 - MiniMax
+- Summary: 修 `generateSceneIllustration` 未传 `characterId` 时退化为纯文生图 —— 后端兜底 `story.characterId`,小程序端 `/illustrate` 没传 characterId 也能用风格化角色垫图。
+- Changed: `apps/api/src/services/illustration.service.ts` `generateSceneIllustration` 改 `if (characterId)` 为 `if (characterId || story.characterId)`,优先用 caller 传入的 `characterId`,否则 fallback 到 `story.characterId`;新增 fallback 日志确认走的是 image-to-image 而非 text-to-image 分支;小程序 `dist/utils/api.js startIllustration(id)` / `pages/create/generate/index.js` / web `useGallery.ts startIllustrationFn` 不动,改动只一处后端。
+- Files: `apps/api/src/services/illustration.service.ts`。
+- Validation: `npm run build --workspace=apps/api` 通过(0 error),`npx tsc --noEmit -p apps/api/tsconfig.json` 无输出(通过)。
+- Risks/Next: 小程序端 `startIllustration` 仍可显式传 `characterId` 优化(目前依赖 story→character 关系);`story.characterId` 为 null 的孤儿 story 仍会走纯文生图,与之前行为一致。
+
 ### 2026-06-13 10:20 +08:00 - MiniMax
 - Summary: `F:\IPro-miniapp\` 修关键 bug - 8 个浅层 pages (login/home/mine/voices/membership/assets/orders/health) + create/upload 的 `require('../../utils/api.js')` 路径全错 (应为 `../../../utils/api.js`),导致 JS 加载失败页面空白,已全部修正。
 - Changed: 9 个文件,require 路径 `../../utils/api.js` → `../../../utils/api.js` (上一级是 `dist/pages/`, api.js 在 `dist/utils/`)。
