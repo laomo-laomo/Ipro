@@ -10,7 +10,7 @@ function getApiKey(): string {
 }
 
 export interface ImageTaskParams {
-  model: 'openai/gpt-image-2' | 'openai/gpt-image-2/edit';
+  model: 'image4.0';
   params: {
     prompt: string;
     image_urls?: string[];
@@ -203,7 +203,7 @@ export async function generateSceneBackground(
   size: string = '4:3'
 ): Promise<string> {
   const taskId = await createImageTask({
-    model: 'openai/gpt-image-2',
+    model: 'image4.0',
     params: {
       prompt,
       image_size: size as ImageTaskParams['params']['image_size'],
@@ -244,7 +244,7 @@ export async function compositeIllustration(
   const prompt = characterHint + scenePrompt;
 
   const taskId = await createImageTask({
-    model: 'openai/gpt-image-2/edit',
+    model: 'image4.0',
     params: {
       prompt,
       image_urls: [sourceImageUrl],
@@ -644,7 +644,7 @@ export async function stylizeCharacter(
   if (isCdnUrl) {
     // Image-to-image edit: keep source face, apply costume/style from storyPrompt
     taskId = await createImageTask({
-      model: 'openai/gpt-image-2/edit',
+      model: 'image4.0',
       params: {
         // Explicitly tell the model to preserve identity from source image
         prompt:
@@ -661,7 +661,7 @@ export async function stylizeCharacter(
   } else {
     // Text-to-image: generates a new stylized character from description
     taskId = await createImageTask({
-      model: 'openai/gpt-image-2',
+      model: 'image4.0',
       params: {
         prompt: storyPrompt,
         image_size: '3:4',

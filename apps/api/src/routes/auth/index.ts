@@ -7,6 +7,8 @@ import { z } from 'zod';
 import { wechatLogin, sendPhoneCode, phoneLogin } from '../../services/auth.service.js';
 import { getOrCreateDevUser, ensureDevMembership } from '../../middlewares/auth.middleware.js';
 import { success, ok, error } from '../../utils/response.js';
+import { prisma } from '../../config/database.js';
+import { uploadFile } from '../../config/oss.js';
 
 async function getCurrentUserData(fastify: FastifyInstance, request: FastifyRequest) {
   // In dev mode, request.user is set by devAutoLogin preHandler (no JWT needed)
@@ -130,6 +132,88 @@ export async function authRoutes(fastify: FastifyInstance) {
    */
   fastify.post('/logout', async (_request: FastifyRequest, reply: FastifyReply) => {
     return reply.send(ok('已退出登录'));
+  });
+
+  /**
+   * PUT /api/auth/profile
+   * 更新用户资料（头像、昵称）
+   */
+  fastify.put('/profile', { preHandler: devAutoLogin }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const userId = request.user?.id;
+      if (!userId) {
+        return reply.status(401).send(error('未登录', 'UNAUTHORIZED'));
+      }
+
+      const body = request.body as any;
+      const updateData: any = {};
+
+      if (body.nickname !== undefined) {
+        updateData.nickname = body.nickname;
+      }
+
+      if (body.avatar !== undefined) {
+        // If avatar is a base64 string, upload to OSS
+        if (body.avatar.startsWith('data:image')) {
+          const base64Data = body.avatar.split(',')[1];
+          const buffer = Buffer.from(base64Data, 'base64');
+          const key = `avatars/${userId}/${Date.now()}.jpg`;
+          const { url } = await uploadFile(key, buffer, { contentType: 'image/jpeg' });
+          updateData.avatar = url;
+        } else {
+          updateData.avatar = body.avatar;
+        }
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return reply.status(400).send(error('没有要更新的数据', 'NO_DATA'));
+      }
+
+      const user = await prisma.user.update({
+        where: { id: userId },
+        data: updateData,
+        select: { id: true, nickname: true, avatar: true },
+      });
+
+      return reply.send(success(user));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '更新失败';
+      return reply.status(500).send(error(message, 'UPDATE_ERROR'));
+    }
+  });
+
+  /**
+   * POST /api/auth/avatar
+   * 上传头像（multipart form data）
+   */
+  fastify.post('/avatar', { preHandler: devAutoLogin }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const userId = request.user?.id;
+      if (!userId) {
+        return reply.status(401).send(error('未登录', 'UNAUTHORIZED'));
+      }
+
+      const data = await request.file();
+      if (!data) {
+        return reply.status(400).send(error('请选择图片', 'NO_FILE'));
+      }
+
+      const buffer = await data.toBuffer();
+      const ext = data.filename?.split('.').pop() || 'jpg';
+      const key = `avatars/${userId}/${Date.now()}.${ext}`;
+      const { url } = await uploadFile(key, buffer, { contentType: data.mimetype || 'image/jpeg' });
+
+      const user = await prisma.user.update({
+        where: { id: userId },
+        data: { avatar: url },
+        select: { id: true, nickname: true, avatar: true },
+      });
+
+      return reply.send(success(user));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '上传失败';
+      return reply.status(500).send(error(message, 'UPLOAD_ERROR'));
+    }
   });
 
   /**
