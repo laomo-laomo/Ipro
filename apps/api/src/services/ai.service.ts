@@ -10,7 +10,7 @@ function getApiKey(): string {
 }
 
 export interface ImageTaskParams {
-  model: 'image4.0';
+  model: 'openai/gpt-image-2' | 'openai/gpt-image-2/edit';
   params: {
     prompt: string;
     image_urls?: string[];
@@ -203,11 +203,11 @@ export async function generateSceneBackground(
   size: string = '4:3'
 ): Promise<string> {
   const taskId = await createImageTask({
-    model: 'image4.0',
+    model: 'openai/gpt-image-2',
     params: {
       prompt,
       image_size: size as ImageTaskParams['params']['image_size'],
-      resolution: '1K',
+      resolution: '2K',
       quality: 'low',
       num_images: 1,
     },
@@ -244,12 +244,12 @@ export async function compositeIllustration(
   const prompt = characterHint + scenePrompt;
 
   const taskId = await createImageTask({
-    model: 'image4.0',
+    model: 'openai/gpt-image-2/edit',
     params: {
       prompt,
       image_urls: [sourceImageUrl],
       image_size: '4:3',
-      resolution: '1K',
+      resolution: '2K',
       quality: 'low',
       num_images: 1,
     },
@@ -644,7 +644,7 @@ export async function stylizeCharacter(
   if (isCdnUrl) {
     // Image-to-image edit: keep source face, apply costume/style from storyPrompt
     taskId = await createImageTask({
-      model: 'image4.0',
+      model: 'openai/gpt-image-2/edit',
       params: {
         // Explicitly tell the model to preserve identity from source image
         prompt:
@@ -653,7 +653,7 @@ export async function stylizeCharacter(
           '. Preserve identity, but push the rendering language hard so the chosen style is immediately obvious at first glance. Change costume, materials, color design, and rendering treatment to match the target style; do not output a weak semi-realistic photo paint-over.',
         image_urls: [photoUrl],
         image_size: '1:1',
-        resolution: '1K',
+        resolution: '2K',
         quality: 'low',
         num_images: 1,
       },
@@ -661,11 +661,11 @@ export async function stylizeCharacter(
   } else {
     // Text-to-image: generates a new stylized character from description
     taskId = await createImageTask({
-      model: 'image4.0',
+      model: 'openai/gpt-image-2',
       params: {
         prompt: storyPrompt,
         image_size: '3:4',
-        resolution: '1K',
+        resolution: '2K',
         quality: 'low',
         num_images: 1,
       },
