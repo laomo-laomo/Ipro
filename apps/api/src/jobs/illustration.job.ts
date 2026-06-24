@@ -13,6 +13,7 @@ import {
   markIllustrationProcessing,
   getIllustrationStats,
 } from '../services/illustration.service.js';
+import { refundIllustrationQuota } from '../services/membership.service.js';
 
 let isWorkerRunning = false;
 
@@ -84,8 +85,26 @@ export async function startIllustrationWorker(): Promise<void> {
     console.log(`[Illustration Worker] Job ${job.id} completed:`, result);
   });
 
-  queue.on('failed', (job, error) => {
+  queue.on('failed', async (job, error) => {
     console.error(`[Illustration Worker] Job ${job.id} failed after ${job.attemptsMade} attempts:`, error.message);
+    const data = job.data as IllustrationJobData;
+    if (data.userId && data.quotaSource && data.deductedAmount && data.deductedSceneCount) {
+      const result = await refundIllustrationQuota(
+        data.userId,
+        {
+          source: data.quotaSource,
+          deductedAmount: data.deductedAmount,
+          sceneCount: data.deductedSceneCount,
+        },
+        1
+      ).catch((refundError) => {
+        console.error(`[Illustration Worker] Failed to refund quota for job ${job.id}:`, refundError.message);
+        return null;
+      });
+      if (result && result.refundedAmount > 0) {
+        console.log(`[Illustration Worker] Refunded quota for failed job ${job.id}:`, result.refundedAmount, data.quotaSource);
+      }
+    }
   });
 
   queue.on('stalled', (job) => {

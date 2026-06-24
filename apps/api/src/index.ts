@@ -27,6 +27,8 @@ import { adminRoutes } from './routes/admin/index.js';
 import { styleRoutes } from './routes/style/index.js';
 import { assetsRoutes } from './routes/assets/index.js';
 import { healthRoutes } from './routes/health/index.js';
+import { configRoutes } from './routes/config/index.js';
+import { iapRoutes } from './routes/iap/index.js';
 import { errorHandler } from './middlewares/error.middleware.js';
 import { authMiddleware } from './middlewares/auth.middleware.js';
 import { adminMiddleware } from './middlewares/admin.middleware.js';
@@ -97,6 +99,9 @@ async function main() {
 
   // Public routes
   await app.register(authRoutes, { prefix: '/api/auth' });
+  // Public config (P2-1 合规改造 2026-06-22): 小程序前端需要读取当前生效的价格,
+  // 但 /api/admin/prices 需要 admin 角色。这里暴露一个公开只读接口。
+  await app.register(configRoutes, { prefix: '/api/config' });
 
   // Protected routes
   await app.register(async (protectedApp) => {
@@ -114,6 +119,8 @@ async function main() {
     await protectedApp.register(orderRoutes, { prefix: '/api/orders' });
     await protectedApp.register(membershipRoutes, { prefix: '/api/membership' });
     await protectedApp.register(styleRoutes, { prefix: '/api/styles' });
+    // Apple IAP (P1-3 合规改造 2026-06-22): iOS 端虚拟商品走 Apple 内购
+    await protectedApp.register(iapRoutes, { prefix: '/api/orders/iap' });
   });
 
   // Protected routes - assets

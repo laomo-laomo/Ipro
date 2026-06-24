@@ -23,7 +23,7 @@ const createOrderSchema = z.object({
   type: z.enum(['membership', 'voice_clone', 'video', 'image', 'story']),
   channel: z.enum(['wechat', 'alipay', 'stripe']).optional().default('wechat'),
   metadata: z.object({
-    cardType: z.enum(['times', 'times1', 'times10', 'times50', 'times100', 'weekly', 'monthly', 'quarterly', 'yearly']).optional(),
+    cardType: z.string().min(1).max(64).optional(),
   }).optional(),
 });
 
@@ -387,3 +387,4 @@ function parseXml(xml: string): Record<string, string> {
 }
 
 export default orderRoutes;
+

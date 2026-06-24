@@ -6,7 +6,7 @@
 //    - 次卡 (times): limited story count, max 20 scenes/story
 //    - 周期卡 (period): daily story limit, max 20 scenes/story
 
-export type MembershipTier = 'points' | 'times' | 'times1' | 'times10' | 'times50' | 'times100' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+export type MembershipTier = string;
 
 export type MembershipType = 'points' | 'card';
 
@@ -14,6 +14,7 @@ export interface MembershipPlanConfig {
   id: MembershipTier;
   name: string;
   type: MembershipType;
+  section?: 'subscription' | 'payAsYouGo';
   originalPrice: number;
   price: number;
   periodDays: number;
@@ -28,6 +29,10 @@ export interface MembershipPlanConfig {
   pointsPerYuan?: number;
   /** Cost in points per scene for points-based system. */
   pointsPerScene?: number;
+  /** Whether the plan is visible and purchasable. Defaults to true. */
+  enabled?: boolean;
+  /** Stable sort order for admin-managed plans. */
+  sortOrder?: number;
 }
 
 export const MEMBERSHIP_PLANS: MembershipPlanConfig[] = [

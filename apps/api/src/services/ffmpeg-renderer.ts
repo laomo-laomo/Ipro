@@ -158,8 +158,14 @@ export async function renderWithFfmpeg(input: RenderInput): Promise<RenderResult
   if (!input.scenes || input.scenes.length === 0) {
     throw new Error('renderWithFfmpeg: scenes must be non-empty');
   }
-  const width = input.width ?? 1024;
-  const height = input.height ?? 768;
+  // 修复 (2026-06-24): 默认输出改为 3:4 portrait (768x1024)。
+  // 内容是绘本插画, 原始尺寸就是 3:4 portrait。输出 4:3 landscape 会导致
+  // 全屏播放时画面上下/左右有大量留白, 用户体验差 (反馈)。
+  // 可通过 VIDEO_RENDER_WIDTH / VIDEO_RENDER_HEIGHT 环境变量覆盖。
+  const envW = parseInt(process.env.VIDEO_RENDER_WIDTH || '', 10);
+  const envH = parseInt(process.env.VIDEO_RENDER_HEIGHT || '', 10);
+  const width = input.width ?? (Number.isFinite(envW) ? envW : 768);
+  const height = input.height ?? (Number.isFinite(envH) ? envH : 1024);
   const fps = input.fps ?? 24;
   const sceneCount = input.scenes.length;
 
@@ -201,13 +207,16 @@ export async function renderWithFfmpeg(input: RenderInput): Promise<RenderResult
     // Audio input (last index = sceneCount)
     args.push('-i', audioPath);
 
-    // Concat the stills into one video stream, then letterbox to 4:3 frame
-    const concatIn = imagePaths.map((_, i) => `[${i}:v]`).join('');
-    const filter =
-      `${concatIn}concat=n=${sceneCount}:v=1:a=0,` +
+    const normalizedVideos = imagePaths.map((_, i) => `[v${i}]`).join('');
+    const normalizeFilters = imagePaths.map((_, i) =>
+      `[${i}:v]` +
       `scale=${width}:${height}:force_original_aspect_ratio=decrease:flags=lanczos,` +
       `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=white,` +
-      `setsar=1,format=yuv420p[vout]`;
+      `setsar=1,fps=${fps},format=yuv420p[v${i}]`
+    );
+    const filter =
+      normalizeFilters.join(';') + ';' +
+      `${normalizedVideos}concat=n=${sceneCount}:v=1:a=0[vout]`;
     args.push('-filter_complex', filter);
     args.push('-map', '[vout]');
     args.push('-map', `${sceneCount}:a`);

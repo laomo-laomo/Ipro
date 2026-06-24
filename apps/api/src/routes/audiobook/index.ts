@@ -104,6 +104,15 @@ export async function audiobookRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      // 修复 (2026-06-24): BUSY 不算 server 错, 返 409 + 透传 AUDIOBOOK_BUSY code
+      if ((error as any).code === 'AUDIOBOOK_BUSY') {
+        return reply.status(409).send({
+          success: false,
+          message: error.message,
+          code: 'AUDIOBOOK_BUSY',
+        });
+      }
+
       return reply.status(500).send({
         success: false,
         message: error.message || 'Failed to generate audiobook',

@@ -49,6 +49,7 @@ export const paymentConfig = {
 // Default price config
 export const defaultPrices = {
   image: 0.2,
+  video: 0.1, // 默认 0.1 元, 设置为 0 表示免费
   voiceClone: 19.9,
   clonedVoicePer1kChar: 0.2,
   timesCard: 9.9,

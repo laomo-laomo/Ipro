@@ -1,14 +1,15 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../../config/database.js';
-import { MEMBERSHIP_MAX_SCENES, MEMBERSHIP_PLANS, type MembershipTier } from '../../config/membership.js';
+import { MEMBERSHIP_MAX_SCENES, type MembershipTier } from '../../config/membership.js';
 import { createMembershipOrder } from '../../services/payment.service.js';
 import { getQuotaStatus } from '../../services/membership.service.js';
 import { redeemCode } from '../../services/redeem.service.js';
+import { getAvailableMembershipPlans, getEnabledMembershipPlanById } from '../../services/membership-plan.service.js';
 
 
 const purchaseSchema = z.object({
-  cardType: z.enum(['times', 'times1', 'times10', 'times50', 'times100', 'weekly', 'monthly', 'quarterly', 'yearly']),
+  cardType: z.string().min(1).max(64),
   channel: z.enum(['wechat', 'alipay', 'stripe']).optional().default('wechat'),
 });
 
@@ -26,7 +27,7 @@ export async function membershipRoutes(app: FastifyInstance): Promise<void> {
   app.get('/status', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const user = request.user;
-      
+
       // Return empty status if not authenticated
       if (!user) {
         return reply.send({
@@ -38,46 +39,19 @@ export async function membershipRoutes(app: FastifyInstance): Promise<void> {
             remainingQuota: 0,
             totalQuota: 0,
             maxScenes: null,
+            userPoints: 0,
           },
         });
       }
 
-      // Get active membership
-      const membership = await prisma.membership.findFirst({
-        where: {
-          userId: user.id,
-          status: 'active',
-          expiresAt: { gt: new Date() },
-        },
-        orderBy: { expiresAt: 'desc' },
-      });
-
-      if (!membership) {
-        return reply.send({
-          success: true,
-          data: {
-            isActive: false,
-            tier: null,
-            expiresAt: null,
-            remainingQuota: 0,
-            totalQuota: 0,
-            maxScenes: null,
-          },
-        });
-      }
-
-      const remainingQuota = membership.quota === 0 ? 9999 : Math.max(0, membership.quota - membership.usedQuota);
-      const maxScenes = MEMBERSHIP_MAX_SCENES[membership.cardType as MembershipTier] ?? null;
+      const quotaStatus = await getQuotaStatus(user.id);
 
       return reply.send({
         success: true,
         data: {
-          isActive: true,
-          tier: membership.cardType,
-          expiresAt: membership.expiresAt.toISOString(),
-          remainingQuota,
-          totalQuota: membership.quota,
-          maxScenes,
+          isActive: quotaStatus.hasMembership,
+          tier: quotaStatus.cardType,
+          ...quotaStatus,
         },
       });
     } catch (error: any) {
@@ -138,7 +112,7 @@ export async function membershipRoutes(app: FastifyInstance): Promise<void> {
     try {
       return reply.send({
         success: true,
-        data: MEMBERSHIP_PLANS,
+        data: await getAvailableMembershipPlans(),
       });
     } catch (error: any) {
       request.log.error(error);
@@ -157,10 +131,18 @@ export async function membershipRoutes(app: FastifyInstance): Promise<void> {
     try {
       const user = request.user!;
       const body = purchaseSchema.parse(request.body);
+      const plan = await getEnabledMembershipPlanById(body.cardType);
+      if (!plan) {
+        return reply.status(400).send({
+          success: false,
+          message: '套餐不存在或已下架',
+          code: 'PLAN_UNAVAILABLE',
+        });
+      }
 
       const result = await createMembershipOrder(
         user.id,
-        body.cardType,
+        body.cardType as MembershipTier,
         body.channel
       );
 
@@ -229,3 +211,4 @@ export async function membershipRoutes(app: FastifyInstance): Promise<void> {
 }
 
 export default membershipRoutes;
+

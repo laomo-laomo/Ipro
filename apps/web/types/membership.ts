@@ -1,6 +1,6 @@
 // Membership types
 
-export type MembershipTier = 'points' | 'times' | 'times1' | 'times10' | 'times50' | 'times100' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+export type MembershipTier = string;
 
 export type MembershipType = 'points' | 'card';
 
@@ -8,6 +8,7 @@ export interface MembershipPlan {
   id: MembershipTier;
   name: string;
   type: MembershipType;
+  section?: 'subscription' | 'payAsYouGo';
   originalPrice: number;
   price: number;
   periodDays: number;
@@ -18,6 +19,8 @@ export interface MembershipPlan {
   dailyStoryLimit?: number;
   pointsPerYuan?: number;
   pointsPerScene?: number;
+  enabled?: boolean;
+  sortOrder?: number;
 }
 
 export interface MembershipStatus {

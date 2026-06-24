@@ -26,6 +26,62 @@ Every code or behavior change should add one short entry at the top of `Unreleas
 
 ## Unreleased
 
+### 2026-06-18 18:00 +08:00 - MiMoCode
+- Summary: 实现视频生成收费可配置功能, 管理员可在 PriceConfig 中设置 video 价格, 为 0 表示免费。
+- Changed: config/index.ts (defaultPrices 添加 video 字段), video/index.ts (根据 video 价格决定是否检查配额), video.service.ts (根据 video 价格决定是否扣费), order/index.ts (修复 paymentUrl 类型错误)。
+- Files: `apps/api/src/config/index.ts`, `apps/api/src/routes/video/index.ts`, `apps/api/src/services/video.service.ts`, `apps/api/src/routes/order/index.ts`。
+- Validation: TypeScript 编译通过。
+- Risks/Next: 管理员页面需要添加 video 价格配置项。
+
+### 2026-06-18 17:30 +08:00 - MiMoCode
+- Summary: 修复会员体系高优先级问题: 次卡按故事扣费、预扣前检查页数、周期卡统计优化、积分扣减校验、卡类型升级。
+- Changed: illustration/index.ts (先检查 maxScenes 再预扣, 次卡按故事扣1次), membership.service.ts (周期卡只统计活跃故事, 积分扣减前检查余额, extendOrCreateMembership 支持卡类型升级), video.service.ts (扣费失败标记视频 failed)。
+- Files: `apps/api/src/routes/illustration/index.ts`, `apps/api/src/services/membership.service.ts`, `apps/api/src/services/video.service.ts`。
+- Validation: TypeScript 编译通过。
+- Risks/Next: 队列路径退款逻辑需要 job worker 支持; 小程序支付参数缺失需要后端支持 JSAPI 支付。
+
+### 2026-06-18 17:00 +08:00 - MiMoCode
+- Summary: Story 删除改为软删除, 保留关联的 Illustration/Video/SceneAudio。
+- Changed: story/index.ts (delete 端点改为 status='deleted', list 排除 deleted 状态)。
+- Files: `apps/api/src/routes/story/index.ts`。
+- Validation: TypeScript 编译通过。
+- Risks/Next: 无。
+
+### 2026-06-18 16:45 +08:00 - MiMoCode
+- Summary: 修复角色删除逻辑: 删除上传照片时保留风格化好的角色; 移除小程序测试账号切换按钮。
+- Changed: character/index.ts (delete: 已风格化角色只清除 originalPhotoUrl, 未风格化硬删除; list: 保留有 stylizedPhotoUrl 的记录), mine/index.wxml+js+wxss (移除 handleLoginAsDev)。
+- Files: `apps/api/src/routes/character/index.ts`, `F:\IPro-miniapp\dist\pages\mine\index.*`。
+- Validation: TypeScript 编译通过。
+- Risks/Next: 无。
+
+### 2026-06-18 16:00 +08:00 - MiMoCode
+- Summary: 修复会员体系 Bug E/O: story 创建时检查 daily limit + 抽取公共 extendOrCreateMembership 函数。
+- Changed: story/index.ts (create/from-template 端点添加 checkDailyStoryLimit), membership.service.ts (新增 extendOrCreateMembership 公共函数), payment.service.ts (processMembershipPayment 改用公共函数), redeem.service.ts (移除重复代码, 改用公共函数)。
+- Files: `apps/api/src/routes/story/index.ts`, `apps/api/src/services/membership.service.ts`, `apps/api/src/services/payment.service.ts`, `apps/api/src/services/redeem.service.ts`。
+- Validation: TypeScript 编译通过 (video/index.ts 错误为已存在问题); 核心逻辑已人工 review。
+- Risks/Next: Bug C (cost 写 Order 表) 待财务需求时修复; 队列路径退款逻辑待添加。
+
+### 2026-06-18 15:30 +08:00 - MiMoCode
+- Summary: 修复会员体系多个 P0 bug: Bug H/I/J/B/F, 包括支付回调事务、voice 数量限制、配额预扣、配置校验。
+- Changed: payment.service.ts (processMembershipPayment 事务 + processVoiceClonePayment 事务/数量限制 + processSuccessfulPayment 失败回滚), membership.service.ts (preDeductQuota/refundQuota 新增 + Bug F 配置校验), illustration.service.ts (移除逐个扣减), illustration/index.ts (预扣模式 + 退款逻辑)。
+- Files: `apps/api/src/services/payment.service.ts`, `apps/api/src/services/membership.service.ts`, `apps/api/src/services/illustration.service.ts`, `apps/api/src/routes/illustration/index.ts`。
+- Validation: TypeScript 编译通过; 核心逻辑已人工 review。
+- Risks/Next: 队列路径 (Redis queue) 的退款逻辑需要在 illustration.job.ts 中添加; Bug C (cost 写 Order 表) 和 Bug E (daily limit 检查位置) 待后续修复。
+
+### 2026-06-16 16:30 +08:00 - Codex
+- Summary: 修复 apiz.ai 生图失败并提升插画质量,同时保留图片文字由客户端叠加显示。
+- Changed: 移除 apiz.ai 已不支持的 `num_images` 参数; 图片生成质量从 `low` 提升到 `medium`; provider 400 错误会保留响应摘要,便于定位真实失败原因; provider 拒绝时的 prompt recovery 会清理旧的强制渲染文字指令。
+- Files: `apps/api/src/services/ai.service.ts`, `apps/api/src/services/illustration.service.ts`.
+- Validation: 单分镜重试 `cmqgd1c2s0001qspcgdpc1n54` scene 0 成功; 批量重试剩余 5 张成功,故事状态变为 `illustrated` 且 `cover` 已写入; `node --check apps/api/src/services/ai.service.ts` 和 `node --check apps/api/src/services/illustration.service.ts` 通过。
+- Risks/Next: 旧图不会自动变成 medium 质量,需要重新生成/重试对应插画; 故事文字不再交给生图模型硬写,由客户端叠加保证清晰和稳定。
+
+### 2026-06-16 10:55 +08:00 - Codex
+- Summary: 生成绘本插画全部完成时自动写入故事封面,避免新绘本在作品列表没有封面。
+- Changed: `Story` 模型新增 `cover`; `checkAllIllustrationsCompleted` 在所有插画完成后取第一张完成插画写入 `story.cover`; 故事列表/详情响应同时返回 `cover` 和 `coverUrl`,前端可直接展示真实封面字段。
+- Files: `apps/api/prisma/schema.prisma`, `apps/api/src/services/illustration.service.ts`, `apps/api/src/routes/story/index.ts`.
+- Validation: `npx prisma db push --schema ./apps/api/prisma/schema.prisma` 已同步 SQLite schema; `npm run build --workspace=apps/api` 未通过,卡在既有 `apps/api/src/routes/video/index.ts:218` 等 `never` 类型错误; `prisma generate` 被 Windows 文件锁阻止替换 `query_engine-windows.dll.node`.
+- Risks/Next: 若本地 API 进程仍在运行,重启后再执行 `npx prisma generate --schema ./apps/api/prisma/schema.prisma`; 已有旧绘本不会自动批量回填封面,但接口响应仍会用第一张插画兜底返回 `coverUrl`。
+
 ### 2026-06-15 09:30 +08:00 - MiniMax
 - Summary: 修「选故事模板点开始生成 → request:fail timeout」 —— `apps/api/src/routes/story/index.ts` 6 处 `await ensureCharacterCostumeForStory` 同步等 AI 服装重生成(可耗 30-60s+),撞 wx.request 60s 默认超时,改成 fire-and-forget 后台异步,主路径立即用旧图返回。
 - Changed: 6 处 await 全部改 `void ensureCharacterCostumeForStory(...).then(costume => { ... }).catch(() => {})`;`story.characterStylizedUrl` 同步用 `character.stylizedPhotoUrl` 兜底;`costume.restyled && costume.url` 触发后台 update。涉及路由:`/api/stories/create`(2 处)、`/api/stories/generate`(2 处)、`/api/stories/from-template`(2 处)。注意 `/create` 路由 cache hit/cache miss 之前没调 costume(HEAD 状态),本次 add + non-blocking 一起;`/generate` 和 `/from-template` 原本就是 await 阻塞,本次改 fire-and-forget。ai.service.ts 的 ensureCharacterCostumeForStory 函数内部兜底(failure→fallback 旧图)保留不动,跟路由层 fire-and-forget 语义一致。

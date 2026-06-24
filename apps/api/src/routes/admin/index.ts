@@ -2,19 +2,20 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../../config/database.js';
 import { getAllPrices, updatePrice } from '../../services/price.service.js';
+import { getAdminMembershipPlans, saveAdminMembershipPlans } from '../../services/membership-plan.service.js';
 
 
 // Request schemas
 const updatePriceSchema = z.object({
   key: z.string(),
-  value: z.number().positive(),
+  value: z.number().nonnegative(), // 允许 0（表示免费）
 });
 
 const createRedeemCodesSchema = z.object({
   rewardType: z.enum(['points', 'membership']),
   count: z.number().int().min(1).max(200),
   pointsAmount: z.number().int().positive().optional(),
-  membershipTier: z.enum(['times', 'times1', 'times10', 'times50', 'times100', 'weekly', 'monthly', 'quarterly', 'yearly']).optional(),
+  membershipTier: z.string().min(1).max(64).optional(),
   expiresAt: z.string().refine((value) => !Number.isNaN(Date.parse(value)), {
     message: 'expiresAt must be a valid date time',
   }).optional(),
@@ -41,9 +42,32 @@ const grantPointsSchema = z.object({
 });
 
 const grantMembershipSchema = z.object({
-  cardType: z.enum(['times', 'times1', 'times10', 'times50', 'times100', 'weekly', 'monthly', 'quarterly', 'yearly']),
-  quota: z.number().int().positive().max(100000),
+  cardType: z.string().min(1).max(64),
+  quota: z.number().int().min(0).max(100000),
   days: z.number().int().positive().max(3650),
+});
+
+const membershipPlanSchema = z.object({
+  id: z.string().min(1).max(64).regex(/^[a-zA-Z0-9_-]+$/, 'ID 只能包含字母、数字、下划线和短横线'),
+  name: z.string().min(1).max(40),
+  type: z.enum(['points', 'card']).default('card'),
+  section: z.enum(['subscription', 'payAsYouGo']).default('payAsYouGo'),
+  originalPrice: z.number().min(0).default(0),
+  price: z.number().min(0),
+  periodDays: z.number().int().positive().max(3650),
+  pricePerDay: z.number().min(0).default(0),
+  maxScenes: z.number().int().positive().max(200).optional(),
+  dailyStoryLimit: z.number().int().positive().max(1000).optional(),
+  pointsPerYuan: z.number().int().positive().optional(),
+  pointsPerScene: z.number().int().positive().optional(),
+  popular: z.boolean().optional().default(false),
+  enabled: z.boolean().optional().default(true),
+  sortOrder: z.number().int().optional().default(0),
+  features: z.array(z.string().min(1).max(80)).max(8).default([]),
+});
+
+const updateMembershipPlansSchema = z.object({
+  plans: z.array(membershipPlanSchema).min(1).max(50),
 });
 
 function randomRedeemCode(length = 12): string {
@@ -114,6 +138,53 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         success: false,
         message: error.message || 'Failed to update price',
         code: 'UPDATE_PRICE_ERROR',
+      });
+    }
+  });
+
+  app.get('/membership-plans', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      return reply.send({
+        success: true,
+        data: await getAdminMembershipPlans(),
+      });
+    } catch (error: any) {
+      request.log.error(error);
+      return reply.status(500).send({
+        success: false,
+        message: error.message || 'Failed to get membership plans',
+        code: 'GET_MEMBERSHIP_PLANS_ERROR',
+      });
+    }
+  });
+
+  app.put('/membership-plans', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.user!;
+      const body = updateMembershipPlansSchema.parse(request.body);
+      const plans = await saveAdminMembershipPlans(body.plans, user.id);
+
+      return reply.send({
+        success: true,
+        message: 'Membership plans updated successfully',
+        data: plans,
+      });
+    } catch (error: any) {
+      request.log.error(error);
+
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({
+          success: false,
+          message: 'Validation error',
+          code: 'VALIDATION_ERROR',
+          errors: error.errors,
+        });
+      }
+
+      return reply.status(500).send({
+        success: false,
+        message: error.message || 'Failed to update membership plans',
+        code: 'UPDATE_MEMBERSHIP_PLANS_ERROR',
       });
     }
   });

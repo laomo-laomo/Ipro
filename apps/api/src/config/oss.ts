@@ -95,6 +95,39 @@ export function getCOSUrl(key: string): string {
   return `https://${cfg.bucket}.cos.${cfg.region}.myqcloud.com/${key}`;
 }
 
+/**
+ * 生成 COS 预签名 URL (限时签名, 5-10 分钟过期)
+ * 解决公有读 + Referer 防盗链限制: 任何来源都能用, 但过期自动失效
+ *
+ * 用法: getSignedUrl('tts/123.mp3', 600) → 'https://...?sign=xxx&q-sign-algorithm=...&q-sign-time=...'
+ */
+export function getSignedUrl(key: string, expiresInSeconds = 600): string {
+  const client = getCOSClient();
+  if (!client) {
+    // 没配客户端, 退回到永久 URL (此时防盗链 + CORS 必须自己配)
+    return getCOSUrl(key);
+  }
+  const cfg = getCosConfig();
+  return client.getObjectUrl({
+    Bucket: cfg.bucket,
+    Region: cfg.region,
+    Key: key,
+    Method: 'GET',
+    Expires: expiresInSeconds,
+    Sign: true,
+  });
+}
+
+/**
+ * 从完整 COS URL 里解析出 key (用于签名已有 URL)
+ * 例: 'https://ipo.cos.ap-guangzhou.myqcloud.com/tts/123.mp3' → 'tts/123.mp3'
+ * 失败 (不是 COS URL) 返 null
+ */
+export function parseCosKeyFromUrl(url: string): string | null {
+  const m = url.match(/^https:\/\/[^/.]+\.cos\.[^/]+\.myqcloud\.com\/(.+?)(?:\?.*)?$/);
+  return m ? m[1] : null;
+}
+
 async function uploadToCOS(
   key: string,
   buffer: Buffer,

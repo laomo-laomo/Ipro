@@ -15,6 +15,7 @@ export interface WechatLoginResult {
     id: string;
     nickname: string | null;
     avatar: string | null;
+    phone: string | null;
     role: 'user' | 'admin';
     hasMembership: boolean;
   };
@@ -29,6 +30,7 @@ export interface PhoneLoginResult {
     id: string;
     nickname: string | null;
     avatar: string | null;
+    phone: string | null;
     role: 'user' | 'admin';
     hasMembership: boolean;
   };
@@ -240,6 +242,7 @@ export async function wechatLogin(
       id: user.id,
       nickname: user.nickname,
       avatar: user.avatar,
+      phone: user.phone,
       role: user.role as 'user' | 'admin',
       hasMembership: !!membership,
     },
@@ -293,7 +296,8 @@ export async function phoneLogin(
   phone: string,
   code: string
 ): Promise<PhoneLoginResult> {
-  // 测试账号 bypass
+  // 测试账号 bypass: 13800138000 + 123456
+  // 模拟器和真机都可以用这个登录, 统一拿到"测试用户"(与 dev 自动登录是同一个 phone)
   if (phone === '13800138000' && code === '123456') {
     let user = await prisma.user.findUnique({
       where: { phone },
@@ -306,6 +310,10 @@ export async function phoneLogin(
         },
       });
     }
+    // 给测试账号补一张 dev 无限卡 (与 auth.middleware.getOrCreateDevUser 行为一致),
+    // 这样无论从哪里登录都能正常生成绘本。
+    const { ensureDevMembership } = await import('../middlewares/auth.middleware.js');
+    await ensureDevMembership(user.id);
     const token = signToken({ id: user.id, role: user.role });
     return {
       token,
@@ -313,8 +321,9 @@ export async function phoneLogin(
         id: user.id,
         nickname: user.nickname,
         avatar: user.avatar,
+        phone: user.phone,
         role: user.role as 'user' | 'admin',
-        hasMembership: false,
+        hasMembership: true,
       },
     };
   }
@@ -377,6 +386,7 @@ export async function phoneLogin(
       id: user.id,
       nickname: user.nickname,
       avatar: user.avatar,
+      phone: user.phone,
       role: user.role as 'user' | 'admin',
       hasMembership: !!membership,
     },

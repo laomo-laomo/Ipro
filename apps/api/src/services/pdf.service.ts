@@ -21,8 +21,10 @@ import { Writable } from 'stream';
 import { prisma } from '../config/database.js';
 import { normalizeStoryboard } from '../types/storyboard.js';
 
-const PAGE_W = 842; // A4 landscape at 72 dpi
-const PAGE_H = 595;
+// 修复 (2026-06-24): PDF 改成竖版 A4 (595x842), 与小程序里的 3:4 画幅保持一致
+// 横版 (842x595) 之前会让 3:4 绘本图上下大块留白, 改成竖版图片能撑满
+const PAGE_W = 595; // A4 portrait at 72 dpi
+const PAGE_H = 842;
 const PAPER = '#f7edd8';
 const INK = '#3a2e1f';
 const RED = '#a82a3a';
@@ -179,7 +181,8 @@ export async function generateStoryPDF(storyId: string, userId: string): Promise
       doc.roundedRect(82, 92, PAGE_W - 164, PAGE_H - 184, 14).stroke();
       doc.restore();
 
-      const titleY = PAGE_H * 0.32;
+      // 修复 (2026-06-24): 竖版 PAGE_H=842, 0.32 偏上, 改 0.18 居中偏上
+      const titleY = PAGE_H * 0.18;
       safeFont(doc, 'kai').fillColor(RED).fontSize(title.length > 8 ? 44 : 56).text(title, 90, titleY, {
         width: PAGE_W - 180,
         align: 'center',

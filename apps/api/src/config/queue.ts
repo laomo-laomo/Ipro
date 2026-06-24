@@ -48,6 +48,9 @@ export interface IllustrationJobData {
   sourceImageUrl?: string;
   prompt: string;
   userId: string;
+  quotaSource?: 'card' | 'points';
+  deductedAmount?: number;
+  deductedSceneCount?: number;
 }
 
 export interface VideoJobData {
@@ -135,3 +138,4 @@ export default {
   getVideoQueue,
   closeQueues,
 };
+

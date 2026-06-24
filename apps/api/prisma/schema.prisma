@@ -82,6 +82,20 @@ model Character {
   lastStylizedTitle  String?
   lastStylizedAt     DateTime?
   featureDesc        String?
+  // Hard identity fields extracted from the source photo by vision LLM.
+  // These are STRUCTURAL constraints that the story generator / illustration
+  // prompts must respect — unlike featureDesc (a free-text appearance blurb
+  // the LLM is allowed to massage), these four columns pin down who the
+  // protagonist must be so we no longer get "user uploaded a boy, story says
+  // 小兔子朵朵" drift.
+  //   gender       'male' | 'female' | 'unknown'
+  //   ageBand      'child' | 'teen' | 'adult' | 'unknown'
+  //   subjectKind  'human' | 'animal' (the user might have uploaded a pet)
+  //   characterName optional display name (LLM can name the protagonist if blank)
+  gender             String?
+  ageBand            String?
+  subjectKind        String?
+  characterName      String?
   status             String   @default("pending") // pending, processing, completed
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -96,6 +110,7 @@ model Story {
   characterId String?
   title       String
   content     String
+  cover       String?
   scenes      String   // JSON: [{index, description, text}]
   // Per-story costume reference. When a story is created with a title that
   // differs from the character's `lastStylizedTitle`, the system re-stylizes
@@ -105,7 +120,7 @@ model Story {
   // wears the Snow White ball gown).
   characterStylizedUrl String?
   source      String   @default("template") // template, custom
-  status      String   @default("draft") // draft, processing, illustrated, completed
+  status      String   @default("draft") // draft, processing, covering, illustrated, completed
   errorMessage String?
   totalCost   Float    @default(0)
   createdAt   DateTime @default(now())
@@ -132,6 +147,12 @@ model Illustration {
   status           String   @default("pending") // pending, processing, completed, failed
   cost             Float    @default(0)
   createdAt        DateTime @default(now())
+  // 修复 (2026-06-18 worker-recovery): 记录 worker 进程开始处理本 illustration 的时间.
+  // 用于 rescueStuckIllustrations() 区分"正在跑"和"server 重启后没人接"两种状态:
+  //   - status='processing' + workerStartedAt IS NULL → 老数据 / 重启前没记录, 直接重置
+  //   - status='processing' + workerStartedAt > now - 3min → 当前进程正在跑, 跳过
+  //   - status='processing' + workerStartedAt < now - 3min → 上一个 worker 死了, 重置 + 重新 enqueue
+  workerStartedAt  DateTime?
 
   @@unique([storyId, sceneIndex])
   @@index([storyId])

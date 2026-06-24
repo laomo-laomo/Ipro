@@ -1,6 +1,12 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { generateStory as generateStoryWithAI, ensureCharacterCostumeForStory } from '../../services/ai.service.js';
+import { generateStory as generateStoryWithAI, ensureCharacterCostumeForStory, type CharacterIdentity, type CharacterGender, type CharacterAgeBand, type CharacterSubjectKind, UNKNOWN_IDENTITY } from '../../services/ai.service.js';
+import {
+  enqueueStoryCoverGeneration,
+  enqueueStoryCompletionAfterCoverGeneration,
+  storyNeedsGeneratedCover,
+} from '../../services/illustration.service.js';
+import { checkDailyStoryLimit } from '../../services/membership.service.js';
 import {
   buildStoryboardFromLegacyScenes,
   normalizeStoryboard,
@@ -39,6 +45,7 @@ interface CreateBody {
   templateId?: string;
   templateName?: string;
   source?: string;
+  skipAutoStylize?: boolean;
 }
 
 interface UpdateStoryBody {
@@ -205,6 +212,7 @@ const createSchema = z
     templateId: z.string().min(1).optional(),
     templateName: z.string().min(1).max(200).optional(),
     source: z.string().max(50).optional(),
+    skipAutoStylize: z.boolean().optional(),
   })
   .refine((data) => data.title || data.customTitle || data.templateId, {
     message: 'title, customTitle, or templateId is required',
@@ -269,26 +277,51 @@ function parseSegmentIndex(segmentId: string): number | null {
 async function getCharacterDescription(
   fastify: FastifyInstance,
   characterId: string
-): Promise<string> {
+): Promise<CharacterIdentity> {
   const character = await fastify.prisma.character.findUnique({
     where: { id: characterId },
   });
   if (!character) {
-    return 'a cute child';
+    // No character at all — story LLM gets a soft "unknown" identity and is
+    // allowed to invent, but it'll still go through the pronoun-check gate.
+    return { ...UNKNOWN_IDENTITY, featureDesc: 'a cute child' };
   }
-  if (character.featureDesc) {
-    return character.featureDesc;
-  }
-  if (character.stylizedPhotoUrl) {
-    return 'an illustration-style main character';
-  }
-  return 'a cute child';
+  return {
+    featureDesc:
+      character.featureDesc
+      || (character.stylizedPhotoUrl ? 'an illustration-style main character' : 'a cute child'),
+    gender: normalizeIdentityField(character.gender, ['male', 'female', 'unknown']) as CharacterGender,
+    ageBand: normalizeIdentityField(character.ageBand, ['child', 'teen', 'adult', 'unknown']) as CharacterAgeBand,
+    subjectKind: normalizeIdentityField(character.subjectKind, ['human', 'animal']) as CharacterSubjectKind,
+    characterName: character.characterName || undefined,
+  };
+}
+
+function normalizeIdentityField(
+  raw: string | null | undefined,
+  allowed: readonly string[]
+): string {
+  if (!raw) return 'unknown';
+  return allowed.includes(raw) ? raw : 'unknown';
 }
 
 function storyResponse(story: any) {
   const storyboard = parseStoryboard(story.scenes, story.title);
+  const firstIllustrationCover = story.illustrations?.find((ill: any) => ill?.imageUrl)?.imageUrl || null;
+  const needsGeneratedCover = storyNeedsGeneratedCover(story, firstIllustrationCover);
+  const cover = story.cover || story.coverUrl || story.coverImageUrl || firstIllustrationCover || null;
+  if (
+    story.id
+    && ['illustrated', 'completed', 'published'].includes(story.status)
+    && needsGeneratedCover
+  ) {
+    enqueueStoryCoverGeneration(story.id, firstIllustrationCover);
+  }
   return {
     ...story,
+    cover,
+    coverUrl: cover,
+    coverReady: Boolean(cover && !needsGeneratedCover),
     storyboard,
     scenes: storyboardToLegacyScenes(storyboard),
   };
@@ -380,13 +413,26 @@ export async function storyRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ success: false, message: 'Invalid request body', errors: parseResult.error.errors });
     }
 
-    const { characterId, templateId, templateName, source: _source } = parseResult.data;
+    const { characterId, templateId, templateName, source: _source, skipAutoStylize } = parseResult.data;
 
     const character = await fastify.prisma.character.findFirst({
       where: { id: characterId, userId },
     });
     if (!character) {
       return reply.status(404).send({ success: false, message: 'Character not found' });
+    }
+
+    // 修复 (2026-06-18 Bug E): 在 story 创建时检查 daily limit,
+    // 防止用户通过创建大量 story 绕过每日限额
+    if (process.env.NODE_ENV === 'production') {
+      const dailyLimitCheck = await checkDailyStoryLimit(userId);
+      if (!dailyLimitCheck.allowed) {
+        return reply.status(403).send({
+          success: false,
+          message: dailyLimitCheck.error || '今日创作已达上限',
+          code: 'DAILY_LIMIT_EXCEEDED',
+        });
+      }
     }
 
     try {
@@ -408,28 +454,7 @@ export async function storyRoutes(fastify: FastifyInstance) {
       const source = templateId ? 'template' : 'custom';
 
       if (cachedTemplate) {
-        // Cache hit: create story with content immediately.
-        // Per-story costume (cache hit fast-path, restyle on cache miss) is
-        // fired in the background — never block the HTTP response on AI
-        // generation, which can take 30-60s+ and would blow the miniprogram's
-        // 60s wx.request timeout. ai.service.ts already falls back to the
-        // existing stylized photo on restyle failure, so this is safe.
         const initialCostumeUrl = character.stylizedPhotoUrl;
-        void ensureCharacterCostumeForStory(
-          fastify.prisma,
-          character,
-          /* storyId */ '', // story not created yet; we set characterStylizedUrl after
-          cachedTemplate.title,
-        ).then((costume) => {
-          if (!costume.restyled || !costume.url) return;
-          // Story row already exists (created just below). If a later create
-          // overwrote characterStylizedUrl with the old URL, refresh it.
-          fastify.prisma.story.update({
-            where: { id: story.id },
-            data: { characterStylizedUrl: costume.url },
-          }).catch(() => { /* story may not exist in some flows */ });
-        }).catch(() => { /* ensure internally already falls back */ });
-
         const storyboard = parseStoryboard(cachedTemplate.scenes, cachedTemplate.title);
         const story = await fastify.prisma.story.create({
           data: {
@@ -443,6 +468,14 @@ export async function storyRoutes(fastify: FastifyInstance) {
             characterStylizedUrl: initialCostumeUrl,
           },
         });
+        if (!skipAutoStylize) {
+          void ensureCharacterCostumeForStory(
+            fastify.prisma,
+            character,
+            story.id,
+            cachedTemplate.title,
+          ).catch(() => { /* ensure internally already falls back */ });
+        }
         return {
           success: true,
           data: { storyId: story.id, title: story.title, content: story.content, storyboard, scenes: storyboardToLegacyScenes(storyboard), status: 'completed', characterStylizedUrl: initialCostumeUrl, costumeRestyled: false },
@@ -466,20 +499,23 @@ export async function storyRoutes(fastify: FastifyInstance) {
         },
       });
 
-      void ensureCharacterCostumeForStory(
-        fastify.prisma,
-        character,
-        story.id,
-        title,
-      ).then((costume) => {
-        if (!costume.restyled || !costume.url) return;
-        fastify.prisma.story.update({
-          where: { id: story.id },
-          data: { characterStylizedUrl: costume.url },
-        }).catch(() => {});
-      }).catch(() => {});
-
-      generateStoryInBackground(fastify, story.id, title, characterId);
+      if (!skipAutoStylize) {
+        // 修复 (2026-06-18): 串行化 costume 重生成 → 故事生成,
+        // 避免 LLM 故事生成比 costume 重生成快时, 前端在旧 URL 上触发插画,
+        // 导致首页/封面与内页服装不一致。ensure 内部已 fall back, catch 不影响。
+        ensureCharacterCostumeForStory(
+          fastify.prisma,
+          character,
+          story.id,
+          title,
+        )
+          .catch(() => {})
+          .finally(() => {
+            generateStoryInBackground(fastify, story.id, title, characterId);
+          });
+      } else {
+        generateStoryInBackground(fastify, story.id, title, characterId);
+      }
 
       return {
         success: true,
@@ -487,7 +523,7 @@ export async function storyRoutes(fastify: FastifyInstance) {
       };
     } catch (error) {
       fastify.log.error(error);
-      return reply.status(500).send({ success: false, message: 'Failed to create story' });
+      return reply.status(500).send({ success: false, message: 'Failed to generate story' });
     }
   });
 
@@ -543,22 +579,19 @@ export async function storyRoutes(fastify: FastifyInstance) {
       const story = await fastify.prisma.story.create({
         data: { userId, characterId, title, content: '', scenes: storyboardToStorage({ version: 1, title, scenes: [] }), source: 'custom', status: 'draft', characterStylizedUrl: character.stylizedPhotoUrl },
       });
-      // Per-story costume (cache hit fast-path, restyle on cache miss) —
-      // fired in the background, never blocks the HTTP response.
-      void ensureCharacterCostumeForStory(
+      // 修复 (2026-06-18): 串行化 costume → 故事生成 (custom title 路径),
+      // ensure 已内部处理 fallback。
+      ensureCharacterCostumeForStory(
         fastify.prisma,
         character,
         story.id,
         title,
-      ).then((costume) => {
-        if (!costume.restyled || !costume.url) return;
-        fastify.prisma.story.update({
-          where: { id: story.id },
-          data: { characterStylizedUrl: costume.url },
-        }).catch(() => {});
-      }).catch(() => {});
+      )
+        .catch(() => {})
+        .finally(() => {
+          generateStoryInBackground(fastify, story.id, title, characterId);
+        });
 
-      generateStoryInBackground(fastify, story.id, title, characterId);
       return { success: true, data: { storyId: story.id, title: story.title, content: '', storyboard: { version: 1, title: story.title, scenes: [] }, scenes: [], status: 'draft', characterStylizedUrl: character.stylizedPhotoUrl, costumeRestyled: false } };
     } catch (error) {
       fastify.log.error(error);
@@ -580,6 +613,19 @@ export async function storyRoutes(fastify: FastifyInstance) {
     if (!character) {
       return reply.status(404).send({ success: false, message: 'Character not found' });
     }
+
+    // 修复 (2026-06-18 Bug E): 在 story 创建时检查 daily limit
+    if (process.env.NODE_ENV === 'production') {
+      const dailyLimitCheck = await checkDailyStoryLimit(userId);
+      if (!dailyLimitCheck.allowed) {
+        return reply.status(403).send({
+          success: false,
+          message: dailyLimitCheck.error || '今日创作已达上限',
+          code: 'DAILY_LIMIT_EXCEEDED',
+        });
+      }
+    }
+
     try {
       const tpl = await fastify.prisma.storyTemplate.findUnique({ where: { id: templateId } });
       const title = tpl?.title || templateName || templateId;
@@ -630,22 +676,18 @@ export async function storyRoutes(fastify: FastifyInstance) {
       const story = await fastify.prisma.story.create({
         data: { userId, characterId, title, content: '', scenes: storyboardToStorage({ version: 1, title, scenes: [] }), source: 'template', status: 'draft', characterStylizedUrl: character.stylizedPhotoUrl },
       });
-      // Per-story costume (cache hit fast-path, restyle on cache miss) —
-      // fired in the background, never blocks the HTTP response.
-      void ensureCharacterCostumeForStory(
+      // 修复 (2026-06-18): 串行化 costume → 故事生成 (from-template cache miss 路径)。
+      ensureCharacterCostumeForStory(
         fastify.prisma,
         character,
         story.id,
         title,
-      ).then((costume) => {
-        if (!costume.restyled || !costume.url) return;
-        fastify.prisma.story.update({
-          where: { id: story.id },
-          data: { characterStylizedUrl: costume.url },
-        }).catch(() => {});
-      }).catch(() => {});
+      )
+        .catch(() => {})
+        .finally(() => {
+          generateStoryInBackground(fastify, story.id, title, characterId);
+        });
 
-      generateStoryInBackground(fastify, story.id, title, characterId);
       return { success: true, data: { storyId: story.id, title: story.title, content: '', storyboard: { version: 1, title: story.title, scenes: [] }, scenes: [], status: 'draft', characterStylizedUrl: character.stylizedPhotoUrl, costumeRestyled: false } };
     } catch (error) {
       fastify.log.error(error);
@@ -659,7 +701,7 @@ fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
       return reply.status(401).send({ success: false, message: 'Unauthorized' });
     }
     const stories = await fastify.prisma.story.findMany({
-      where: { userId },
+      where: { userId, status: { not: 'deleted' } },
       include: {
         illustrations: { orderBy: { sceneIndex: 'asc' } },
         videos: { orderBy: { createdAt: 'desc' }, take: 1 },
@@ -745,16 +787,28 @@ fastify.get('/:id', async (request: FastifyRequest<{ Params: StoryParams }>, rep
       // imageStatus is still accurate — loadStory will pull the truth.
       const terminalCount = completedIllustrations + failedIllustrations;
       if (totalIllustrations > 0 && terminalCount >= totalIllustrations) {
-        status = failedIllustrations > 0 ? 'failed' : 'completed';
-        currentStep = failedIllustrations > 0
-          ? `插画已结束 (${completedIllustrations} 张成功, ${failedIllustrations} 张失败)`
-          : '已完成';
-        progress = 10 + Math.round((completedIllustrations / Math.max(totalIllustrations, 1)) * 70);
+        if (failedIllustrations > 0) {
+          status = 'failed';
+          currentStep = `插画已结束 (${completedIllustrations} 张成功, ${failedIllustrations} 张失败)`;
+          progress = 10 + Math.round((completedIllustrations / Math.max(totalIllustrations, 1)) * 70);
+        } else {
+          const fallbackCover = story.illustrations.find((ill: any) => ill?.imageUrl)?.imageUrl || null;
+          enqueueStoryCompletionAfterCoverGeneration(story.id, fallbackCover);
+          status = 'covering';
+          currentStep = '正在生成封面';
+          progress = 90;
+        }
       } else {
         status = 'processing';
         currentStep = '正在生成插画 (' + completedIllustrations + '/' + totalIllustrations + ')';
         progress = 10 + Math.round((completedIllustrations / Math.max(totalIllustrations, 1)) * 70);
       }
+    } else if (story.status === 'covering') {
+      const fallbackCover = story.illustrations.find((ill: any) => ill?.imageUrl)?.imageUrl || null;
+      enqueueStoryCompletionAfterCoverGeneration(story.id, fallbackCover);
+      status = 'covering';
+      currentStep = '正在生成封面';
+      progress = 90;
     } else if (story.status === 'rendering') {
       status = 'rendering';
       currentStep = '正在生成视频';
@@ -933,6 +987,7 @@ fastify.get('/:id', async (request: FastifyRequest<{ Params: StoryParams }>, rep
     return { success: true, data: storyResponse(updatedStory) };
   });
 
+  // 修复: Story 删除改为软删除, 保留 Illustration/Video/SceneAudio 给用户查看
   fastify.delete<{ Params: StoryParams }>('/:id', async (request, reply) => {
     const userId = request.user?.id;
     const { id } = request.params;
@@ -943,7 +998,11 @@ fastify.get('/:id', async (request: FastifyRequest<{ Params: StoryParams }>, rep
     if (!story) {
       return reply.status(404).send({ success: false, message: 'Story not found' });
     }
-    await fastify.prisma.story.delete({ where: { id } });
+    // 软删除: 设置 status='deleted', 不删除关联的 Illustration/Video/SceneAudio
+    await fastify.prisma.story.update({
+      where: { id },
+      data: { status: 'deleted' },
+    });
     return { success: true, message: 'Story deleted' };
   });
 }

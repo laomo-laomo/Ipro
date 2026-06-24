@@ -86,14 +86,21 @@ export async function videoRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      // Check quota before creating video
-      const quotaCheck = await checkQuota(userId, 1);
-      if (!quotaCheck.hasQuota) {
-        return reply.status(403).send({
-          success: false,
-          message: quotaCheck.error || '配额不足',
-          code: 'QUOTA_EXCEEDED',
-        });
+      // 修复: 根据 PriceConfig 判断视频是否收费
+      const { getAllPrices } = await import('../../services/price.service.js');
+      const prices = await getAllPrices();
+      const videoPrice = (prices as any).video ?? 0.1;
+
+      // 只有视频价格 > 0 时才检查配额
+      if (videoPrice > 0) {
+        const quotaCheck = await checkQuota(userId, 1);
+        if (!quotaCheck.hasQuota) {
+          return reply.status(403).send({
+            success: false,
+            message: quotaCheck.error || '配额不足',
+            code: 'QUOTA_EXCEEDED',
+          });
+        }
       }
 
       // Create video record

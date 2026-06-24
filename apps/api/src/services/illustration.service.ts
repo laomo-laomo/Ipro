@@ -11,6 +11,10 @@ import {
   generateSceneBackground,
   compositeIllustration,
   buildVisualScenePrompt,
+  generateStoryCoverImage,
+  extractCoverDesignBrief,
+  type CharacterIdentity,
+  UNKNOWN_IDENTITY,
 } from './ai.service.js';
 import { normalizeStoryboard, storyboardToStorage } from '../types/storyboard.js';
 import {
@@ -19,6 +23,8 @@ import {
   emitSceneProcessing,
   emitStoryCompleted,
 } from './illustration-emitter.js';
+// 修复 (2026-06-18 Bug B): 配额预扣逻辑已移到 route 层 (preDeductQuota),
+// 此处不再逐个扣减。import 保留但不使用, 避免其他地方引用。
 import { deductQuota } from './membership.service.js';
 
 export interface Scene {
@@ -66,6 +72,167 @@ const PROMPT_BLOCKLIST = [
   { pattern: /baby|toddler/gi, replacement: 'small young child' },
   { pattern: /kiss|romantic embrace/gi, replacement: 'leaning close holding hands' },
 ];
+
+const coverGenerationInFlight = new Map<string, Promise<string | null>>();
+const storyCompletionInFlight = new Map<string, Promise<boolean>>();
+
+export function storyNeedsGeneratedCover(story: { cover?: string | null }, fallbackCover?: string | null): boolean {
+  if (!story.cover) return true;
+  if (fallbackCover && story.cover === fallbackCover) return true;
+
+  // New covers are uploaded after the backend composites the exact title into
+  // the image. Older model-direct covers can contain wrong Chinese text, so
+  // refresh anything that is not from the deterministic cover pipeline.
+  return !/(^|\/)covers\//.test(story.cover);
+}
+
+async function generateAndSaveStoryCover(storyId: string, fallbackCover?: string | null): Promise<string | null> {
+  const story = await prisma.story.findUnique({
+    where: { id: storyId },
+    include: {
+      illustrations: { orderBy: { sceneIndex: 'asc' } },
+    },
+  });
+
+  if (!story || !storyNeedsGeneratedCover(story, fallbackCover)) {
+    return story?.cover || null;
+  }
+
+  const storyboard = normalizeStoryboard(story.scenes, story.title);
+  const character = story.characterId
+    ? await prisma.character.findUnique({ where: { id: story.characterId } })
+    : null;
+  const characterImageUrl = story.characterStylizedUrl || character?.stylizedPhotoUrl || null;
+
+  // 修复 (2026-06-18 cover-chaos bug): 之前直接把 5 个场景的 imageDescription
+  // 当作 motifs 灌进 cover prompt, 模型自由发挥画了天使/恶魔/糖果店/动物群,
+  // 跟"正确设计绘本封面"完全脱节. 现在先抽出 Cover Design Brief (LLM,
+  // 失败时 fallback 规则提取), 把 brief + 原始 scenes 一起交给 cover 生成器.
+  const sceneInputs = storyboard.scenes
+    .slice(0, 5)
+    .map((scene) => ({
+      imageDescription: scene.imageDescription,
+      storyText: scene.storyText,
+    }))
+    .filter((scene) => Boolean(scene.imageDescription || scene.storyText));
+
+  const summaryText = storyboard.summary || story.content || '';
+  const brief = await extractCoverDesignBrief({
+    title: story.title,
+    summary: summaryText,
+    scenes: sceneInputs,
+  });
+
+  const cover = await generateStoryCoverImage({
+    title: story.title,
+    summary: summaryText,
+    sceneHints: sceneInputs.map((scene) => scene.imageDescription || scene.storyText || '').filter(Boolean),
+    characterImageUrl,
+    brief,
+    // Lock the cover protagonist to the user's character so cover stays
+    // consistent with inner-page illustrations.
+    protagonistIdentity: character ? {
+      featureDesc: character.featureDesc || '',
+      gender: ((character.gender as CharacterIdentity['gender']) || 'unknown'),
+      ageBand: ((character.ageBand as CharacterIdentity['ageBand']) || 'unknown'),
+      subjectKind: ((character.subjectKind as CharacterIdentity['subjectKind']) || 'human'),
+      characterName: character.characterName || undefined,
+    } : null,
+  });
+
+  await prisma.story.update({
+    where: { id: storyId },
+    data: { cover },
+  });
+
+  return cover;
+}
+
+function startStoryCoverGeneration(storyId: string, fallbackCover?: string | null): Promise<string | null> {
+  const existing = coverGenerationInFlight.get(storyId);
+  if (existing) return existing;
+
+  const task = generateAndSaveStoryCover(storyId, fallbackCover)
+    .finally(() => {
+      coverGenerationInFlight.delete(storyId);
+    });
+
+  coverGenerationInFlight.set(storyId, task);
+  return task;
+}
+
+export function enqueueStoryCoverGeneration(storyId: string, fallbackCover?: string | null): void {
+  startStoryCoverGeneration(storyId, fallbackCover)
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[Cover] Failed to generate cover for story ${storyId}: ${message}`);
+    });
+}
+
+async function failStoryCoverGeneration(storyId: string, error: unknown): Promise<void> {
+  const message = error instanceof Error ? error.message : String(error);
+  console.warn(`[Cover] Failed to complete story ${storyId}: ${message}`);
+  await prisma.story.update({
+    where: { id: storyId },
+    data: {
+      status: 'failed',
+      errorMessage: `封面生成失败: ${message}`,
+    },
+  }).catch(() => {});
+}
+
+async function markStoryIllustrated(storyId: string, totalCost: number, cover: string, illustrationCount: number): Promise<void> {
+  await prisma.story.update({
+    where: { id: storyId },
+    data: {
+      status: 'illustrated',
+      totalCost,
+      cover,
+    },
+  });
+
+  emitStoryCompleted(storyId, {
+    totalCost,
+    illustrationCount,
+  });
+}
+
+export async function completeStoryAfterCoverGeneration(
+  storyId: string,
+  fallbackCover?: string | null,
+  totalCost?: number,
+  illustrationCount?: number
+): Promise<boolean> {
+  const existing = storyCompletionInFlight.get(storyId);
+  if (existing) return existing;
+
+  const task = (async () => {
+    const illustrations = await prisma.illustration.findMany({
+      where: { storyId },
+    });
+    const finalTotalCost = totalCost ?? illustrations.reduce((sum, ill) => sum + ill.cost, 0);
+    const finalIllustrationCount = illustrationCount ?? illustrations.length;
+
+    try {
+      const cover = await startStoryCoverGeneration(storyId, fallbackCover);
+      if (!cover) return false;
+      await markStoryIllustrated(storyId, finalTotalCost, cover, finalIllustrationCount);
+      return true;
+    } catch (error) {
+      await failStoryCoverGeneration(storyId, error);
+      return false;
+    }
+  })().finally(() => {
+    storyCompletionInFlight.delete(storyId);
+  });
+
+  storyCompletionInFlight.set(storyId, task);
+  return task;
+}
+
+export function enqueueStoryCompletionAfterCoverGeneration(storyId: string, fallbackCover?: string | null): void {
+  void completeStoryAfterCoverGeneration(storyId, fallbackCover);
+}
 
 function normalizeWhitespace(input: string): string {
   return input.replace(/\s+/g, ' ').trim();
@@ -169,11 +336,14 @@ function createRevisedPrompt(originalPrompt: string, error: unknown, attempt: nu
   const failureCategory = classifyIllustrationFailure(error);
   let revised = preservePromptEffect(originalPrompt);
 
-  if (failureCategory === 'policy_blocked') {
+  if (failureCategory === 'policy_blocked' || failureCategory === 'provider_rejected') {
     revised = revised
       .replace(/close-up/gi, 'storybook composition')
       .replace(/highly realistic/gi, 'gentle illustrated')
-      .replace(/intense/gi, 'warm');
+      .replace(/intense/gi, 'warm')
+      .replace(/MUST RENDER[^.]+\./gi, '')
+      .replace(/Inside that band,[^.]+\./gi, '')
+      .replace(/Do not omit the caption,[^.]+\./gi, '');
   }
 
   if (attempt > 1) {
@@ -421,6 +591,7 @@ export async function generateSceneIllustration(
 
   let sourceImageUrl: string | undefined;
   let characterStyle: string | undefined;
+  let characterIdentity: CharacterIdentity | null = null;
 
   // Fall back to the story's bound character when the caller (e.g. the
   // miniprogram `/illustrate` endpoint, which currently omits characterId)
@@ -450,6 +621,15 @@ export async function generateSceneIllustration(
       console.log(
         `[Illustrate] story=${storyId} scene=${sceneIndex} using stylized character ${effectiveCharacterId} as image-to-image reference`
       );
+      // Read the hard identity fields (gender / age / species / name) so the
+      // illustration prompt can lock the protagonist's identity across scenes.
+      characterIdentity = {
+        featureDesc: character.featureDesc || '',
+        gender: (character.gender as CharacterIdentity['gender']) || 'unknown',
+        ageBand: (character.ageBand as CharacterIdentity['ageBand']) || 'unknown',
+        subjectKind: ((character.subjectKind as CharacterIdentity['subjectKind']) || 'human'),
+        characterName: character.characterName || undefined,
+      };
     } else {
       throw new Error('Character has no stylized photo. Please complete the style step first.');
     }
@@ -474,7 +654,7 @@ export async function generateSceneIllustration(
   for (let attempt = 0; attempt <= MAX_PROMPT_RECOVERY_RETRIES; attempt++) {
     try {
       const imageUrl = sourceImageUrl
-        ? await compositeIllustration(sourceImageUrl, currentPrompt)
+        ? await compositeIllustration(sourceImageUrl, currentPrompt, undefined, characterIdentity)
         : await generateSceneBackground(currentPrompt);
 
       await prisma.illustration.update({
@@ -520,26 +700,8 @@ export async function generateSceneIllustration(
         cost,
       });
 
-      // Deduct quota after successful illustration generation
-      const story = await prisma.story.findUnique({ where: { id: storyId }, select: { userId: true } });
-      if (story) {
-        await deductQuota(story.userId, 1).catch(err => {
-          console.error('[Illustration] Failed to deduct quota:', err.message);
-        });
-      }
-
-      // Check if all illustrations are done
-      const allIllustrations = await prisma.illustration.findMany({
-        where: { storyId },
-      });
-      const allDone = allIllustrations.every(ill => ill.status === 'completed');
-      if (allDone) {
-        const totalCost = allIllustrations.reduce((sum, ill) => sum + ill.cost, 0);
-        emitStoryCompleted(storyId, {
-          totalCost,
-          illustrationCount: allIllustrations.length,
-        });
-      }
+      // 修复 (2026-06-18 Bug B): 配额已预扣, 此处不再逐个扣减
+      // 预扣逻辑在 route 层 (preDeductQuota), 生成完成后根据成功数量调整
 
       return {
         imageUrl,
@@ -614,7 +776,7 @@ export async function generateSceneIllustration(
           const llmRewritten = await llmRewritePrompt(currentPrompt);
           if (llmRewritten !== currentPrompt) {
             const imageUrl = sourceImageUrl
-              ? await compositeIllustration(sourceImageUrl, llmRewritten)
+              ? await compositeIllustration(sourceImageUrl, llmRewritten, undefined, characterIdentity)
               : await generateSceneBackground(llmRewritten);
 
             await prisma.illustration.update({
@@ -711,14 +873,18 @@ export async function checkAllIllustrationsCompleted(storyId: string): Promise<b
 
   if (allCompleted) {
     const totalCost = illustrations.reduce((sum, ill) => sum + ill.cost, 0);
+    const fallbackCover = illustrations
+      .slice()
+      .sort((a, b) => a.sceneIndex - b.sceneIndex)
+      .find((ill) => ill.imageUrl)?.imageUrl || null;
     await prisma.story.update({
       where: { id: storyId },
       data: {
-        status: 'illustrated',
         totalCost,
+        status: 'covering',
       },
     });
-    return true;
+    return completeStoryAfterCoverGeneration(storyId, fallbackCover, totalCost, illustrations.length);
   }
 
   if (anyFailed && !allCompleted) {
@@ -755,7 +921,11 @@ export async function getIllustrationStats(storyId: string) {
 }
 
 /**
- * Mark illustration as failed
+ * Mark illustration as failed.
+ *
+ * Also clears `workerStartedAt` so the rescue watchdog doesn't re-enqueue
+ * a permanently broken job — failed illustrations need a manual retry from
+ * the user (or the /retry route), not auto-rescue.
  */
 export async function markIllustrationFailed(
   illustrationId: string,
@@ -767,6 +937,7 @@ export async function markIllustrationFailed(
       status: 'failed',
       errorMessage: error,
       failureCategory: classifyIllustrationFailure(error),
+      workerStartedAt: null,
     },
   });
 
@@ -774,13 +945,183 @@ export async function markIllustrationFailed(
 }
 
 /**
- * Mark illustration as processing
+ * Mark illustration as processing.
+ *
+ * Also stamps `workerStartedAt = now()` so `rescueStuckIllustrations()` can
+ * tell live workers from zombies after a server restart.
  */
 export async function markIllustrationProcessing(illustrationId: string): Promise<void> {
   await prisma.illustration.update({
     where: { id: illustrationId },
-    data: { status: 'processing' },
+    data: { status: 'processing', workerStartedAt: new Date() },
   });
+}
+
+// ============================================================
+// Resumable worker pool — fixes "fire-and-forget" task loss bug
+// (2026-06-18): /illustrate used to fire-and-forget Promise.all on the
+// request handler. Server restart (any cause: tsx watch, prisma generate,
+// manual restart) killed all in-flight workers with no recovery path —
+// stuck illustrations sat in `processing` forever. The pool below makes
+// every enqueue durable (DB row + queue entry), and a startup watchdog
+// re-enqueues any zombie that hasn't pinged in 3 minutes.
+// ============================================================
+
+/** In-memory FIFO queue. Lost on restart — that's OK, rescue() rebuilds it. */
+const illustrationQueue: Array<{
+  storyId: string;
+  sceneIndex: number;
+  characterId?: string;
+}> = [];
+
+/** Concurrency cap (matches the previous fire-and-forget value). */
+const ILLUSTRATION_CONCURRENCY = 2;
+let illustrationActiveCount = 0;
+let illustrationDrainInFlight = false;
+
+/**
+ * Single recoverable worker entrypoint. The route layer (and the startup
+ * rescue) calls this instead of starting raw promises. Each call writes
+ * `workerStartedAt` via `markIllustrationProcessing()` so the watchdog can
+ * tell live workers from zombies.
+ */
+export async function enqueueIllustrationWork(
+  storyId: string,
+  sceneIndex: number,
+  characterId?: string | null
+): Promise<void> {
+  illustrationQueue.push({
+    storyId,
+    sceneIndex,
+    characterId: characterId ?? undefined,
+  });
+  scheduleIllustrationDrain();
+}
+
+function scheduleIllustrationDrain(): void {
+  if (illustrationDrainInFlight) return;
+  illustrationDrainInFlight = true;
+  setImmediate(() => {
+    illustrationDrainInFlight = false;
+    void drainIllustrationQueue();
+  });
+}
+
+async function drainIllustrationQueue(): Promise<void> {
+  while (illustrationActiveCount < ILLUSTRATION_CONCURRENCY && illustrationQueue.length > 0) {
+    const job = illustrationQueue.shift();
+    if (!job) break;
+    illustrationActiveCount += 1;
+    void runOneIllustrationJob(job).finally(() => {
+      illustrationActiveCount -= 1;
+      // Keep draining — another job may have been enqueued while this one ran.
+      if (illustrationQueue.length > 0 && illustrationActiveCount < ILLUSTRATION_CONCURRENCY) {
+        scheduleIllustrationDrain();
+      }
+    });
+  }
+}
+
+async function runOneIllustrationJob(job: {
+  storyId: string;
+  sceneIndex: number;
+  characterId?: string;
+}): Promise<void> {
+  try {
+    await generateSceneIllustration(job.storyId, job.sceneIndex, job.characterId);
+  } catch (error) {
+    // generateSceneIllustration already marks the row as failed with a
+    // classified error message; nothing more to do here.
+    console.error(
+      `[IllustrationPool] scene ${job.sceneIndex} of story ${job.storyId} failed:`,
+      error instanceof Error ? error.message : error
+    );
+  }
+  // Advance the story status (no-op if other scenes are still pending).
+  await checkAllIllustrationsCompleted(job.storyId).catch(() => {});
+}
+
+/**
+ * Rescue illustrations that were processing when the previous server died.
+ *
+ * Triggered from three places:
+ * 1. Server startup — picks up zombies left by the dead process.
+ * 2. /illustrate route — extra safety net before starting a fresh batch.
+ * 3. setInterval watchdog (every 60s) — covers any leak we missed.
+ *
+ * Rule:
+ *   - status='processing' AND workerStartedAt IS NULL      → reset (legacy row, never stamped)
+ *   - status='processing' AND workerStartedAt < now-3min    → reset (previous worker is dead)
+ *   - status='processing' AND workerStartedAt >= now-3min   → leave alone (worker is alive)
+ *
+ * Resetting means: status='pending' + workerStartedAt=null, then enqueue.
+ */
+export async function rescueStuckIllustrations(): Promise<number> {
+  const STUCK_THRESHOLD_MS = 3 * 60 * 1000;
+  const threshold = new Date(Date.now() - STUCK_THRESHOLD_MS);
+
+  const zombies = await prisma.illustration.findMany({
+    where: {
+      status: 'processing',
+      OR: [
+        { workerStartedAt: null },
+        { workerStartedAt: { lt: threshold } },
+      ],
+    },
+    include: {
+      story: { select: { characterId: true } },
+    },
+  });
+
+  if (zombies.length === 0) return 0;
+
+  console.warn(`[IllustrationRescue] Found ${zombies.length} zombie illustration(s); re-enqueueing`);
+
+  for (const ill of zombies) {
+    await prisma.illustration.update({
+      where: { id: ill.id },
+      data: {
+        status: 'pending',
+        workerStartedAt: null,
+      },
+    });
+    await enqueueIllustrationWork(ill.storyId, ill.sceneIndex, ill.story?.characterId);
+  }
+
+  return zombies.length;
+}
+
+/**
+ * Start a periodic watchdog that calls `rescueStuckIllustrations()` every
+ * 60s. Idempotent — calling twice does not start two intervals.
+ *
+ * Returned handle can be used to stop the watchdog (mostly for tests).
+ */
+let watchdogIntervalHandle: NodeJS.Timeout | null = null;
+export function startIllustrationWatchdog(intervalMs = 60_000): void {
+  if (watchdogIntervalHandle) return;
+  watchdogIntervalHandle = setInterval(() => {
+    rescueStuckIllustrations()
+      .then((count) => {
+        if (count > 0) {
+          console.log(`[IllustrationWatchdog] rescued ${count} zombie(s)`);
+        }
+      })
+      .catch((error) => {
+        console.error('[IllustrationWatchdog] rescue failed:', error);
+      });
+  }, intervalMs);
+  // Don't keep the Node event loop alive solely for this watchdog.
+  watchdogIntervalHandle.unref?.();
+  console.log(`[IllustrationWatchdog] started (interval=${intervalMs}ms)`);
+}
+
+/** Stop the watchdog (for graceful shutdown / tests). */
+export function stopIllustrationWatchdog(): void {
+  if (watchdogIntervalHandle) {
+    clearInterval(watchdogIntervalHandle);
+    watchdogIntervalHandle = null;
+  }
 }
 
 export default {
@@ -792,4 +1133,8 @@ export default {
   getIllustrationStats,
   markIllustrationFailed,
   markIllustrationProcessing,
+  enqueueIllustrationWork,
+  rescueStuckIllustrations,
+  startIllustrationWatchdog,
+  stopIllustrationWatchdog,
 };

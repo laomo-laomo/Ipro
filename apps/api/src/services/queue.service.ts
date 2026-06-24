@@ -35,7 +35,8 @@ export const illustrationQueue = {
     storyId: string,
     sceneIndices: number[],
     characterId?: string,
-    userId?: string
+    userId?: string,
+    quota?: Pick<IllustrationJobData, 'quotaSource' | 'deductedAmount' | 'deductedSceneCount'>
   ): Promise<string[]> {
     const queue = getIllustrationQueue();
     const jobs = sceneIndices.map(sceneIndex => ({
@@ -47,6 +48,7 @@ export const illustrationQueue = {
         characterId,
         prompt: '',
         userId: userId || '',
+        ...(quota || {}),
       } as IllustrationJobData,
       opts: {
         priority: sceneIndex,
@@ -215,3 +217,4 @@ export default {
   illustrationQueue,
   videoQueue,
 };
+

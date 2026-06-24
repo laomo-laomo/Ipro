@@ -95,3 +95,31 @@ styles-*.txt
 scratch-*.json
 # Test artifacts
 .tmp-write-test.txt
+
+# 临时调试/数据文件(部署期间产生)
+probe.py
+check80.py
+check_pdf.cjs
+parse_pdf.cjs
+check_user2.cjs
+check_users.cjs
+dc.txt
+fu.txt
+tabs.txt
+find.txt
+vid.json
+vid2.json
+vid3.json
+tmp_stories.json
+test_output.pdf
+test_tts.mp3
+*.mp4
+apps/api/check-task.cjs
+apps/api/check-tasks.cjs
+apps/api/prisma/check-tasks.cjs
+apps/api/prisma/*.backup-*
+scripts/_debug/
+project.private.config.json
+project.config.json
+.worktrees/
+my-miniprogram/

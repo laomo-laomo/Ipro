@@ -616,7 +616,7 @@ export async function renderVideo(
   } catch (error: any) {
     await prisma.video.update({
       where: { id: videoId },
-      data: { status: 'failed' },
+      data: { status: 'failed', errorMessage: error.message || 'Video rendering failed' },
     });
     if (error.name === 'AbortError' || error.message.includes('aborted')) {
       throw new Error('Video rendering timed out after 10 minutes');
@@ -840,15 +840,31 @@ export async function markVideoCompleted(
     },
   });
 
-  // Deduct quota after successful video rendering
-  const story = await prisma.story.findUnique({
-    where: { id: video.storyId },
-    select: { userId: true },
-  });
-  if (story) {
-    await deductQuota(story.userId, 1).catch(err => {
-      console.error('[Video] Failed to deduct quota:', err.message);
+  // 修复: 根据 PriceConfig 判断视频是否收费
+  const { getAllPrices } = await import('./price.service.js');
+  const prices = await getAllPrices();
+  const videoPrice = (prices as any).video ?? 0.1;
+
+  // 只有视频价格 > 0 时才扣费
+  if (videoPrice > 0) {
+    const story = await prisma.story.findUnique({
+      where: { id: video.storyId },
+      select: { userId: true },
     });
+    if (story) {
+      const quotaResult = await deductQuota(story.userId, 1);
+      if (!quotaResult.success) {
+        // 扣费失败, 标记视频为 failed
+        await prisma.video.update({
+          where: { id: video.id },
+          data: {
+            status: 'failed',
+            errorMessage: quotaResult.error || '配额扣减失败',
+          },
+        });
+        throw new Error(quotaResult.error || '配额扣减失败, 视频无法完成');
+      }
+    }
   }
 }
 

@@ -170,3 +170,22 @@ export interface AdminRedeemCodeFilters {
 export interface AdminPriceMap {
   [key: string]: number;
 }
+
+export interface AdminMembershipPlan {
+  id: string;
+  name: string;
+  type: 'points' | 'card';
+  section: 'subscription' | 'payAsYouGo';
+  originalPrice: number;
+  price: number;
+  periodDays: number;
+  features: string[];
+  popular?: boolean;
+  pricePerDay: number;
+  maxScenes?: number;
+  dailyStoryLimit?: number;
+  pointsPerYuan?: number;
+  pointsPerScene?: number;
+  enabled: boolean;
+  sortOrder: number;
+}

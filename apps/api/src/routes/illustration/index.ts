@@ -12,9 +12,11 @@ import {
   getIllustrationStats,
   generateSceneIllustration,
   checkAllIllustrationsCompleted,
+  markIllustrationProcessing,
+  rescueStuckIllustrations,
 } from '../../services/illustration.service.js';
 import { illustrationQueue } from '../../services/queue.service.js';
-import { checkQuota, getMaxScenesForUser } from '../../services/membership.service.js';
+import { getMaxScenesForUser, preDeductIllustrationQuota, refundIllustrationQuota, type IllustrationQuotaDeduction } from '../../services/membership.service.js';
 import { prisma } from '../../config/database.js';
 import { normalizeStoryboard } from '../../types/storyboard.js';
 
@@ -132,23 +134,8 @@ export async function illustrationRoutes(app: FastifyInstance): Promise<void> {
         ? targetSceneIndices
         : targetSceneIndices.filter((index) => !activeOrCompletedSceneIndices.has(index));
 
-      // Check quota only for scenes that actually need generation.
-      const quotaCheck = await checkQuota(userId, sceneIndicesToGenerate.length);
-      console.log(`[Illustrate] quotaCheck:`, JSON.stringify(quotaCheck));
-      if (!quotaCheck.hasQuota) {
-        // Dev override: skip quota check in development
-        if (process.env.NODE_ENV !== 'production') {
-          console.log(`[Illustrate] Dev mode: bypassing quota check`);
-        } else {
-          return reply.status(403).send({
-            success: false,
-            message: quotaCheck.error || '配额不足',
-            code: 'QUOTA_EXCEEDED',
-          });
-        }
-      }
-
-      // Check maxScenes limit for times card holders
+      // 修复 (2026-06-18): 先检查 maxScenes, 再预扣配额
+      // 避免先扣费再校验导致白扣
       const maxScenes = await getMaxScenesForUser(userId);
       if (maxScenes !== null && targetSceneIndices.length > maxScenes) {
         if (process.env.NODE_ENV !== 'production') {
@@ -156,10 +143,27 @@ export async function illustrationRoutes(app: FastifyInstance): Promise<void> {
         } else {
           return reply.status(403).send({
             success: false,
-            message: `次卡用户每个故事最多 ${maxScenes} 页，当前请求 ${targetSceneIndices.length} 页`,
+            message: `每个故事最多 ${maxScenes} 页，当前请求 ${targetSceneIndices.length} 页`,
             code: 'MAX_SCENES_EXCEEDED',
           });
         }
+      }
+
+      // 次卡/周期卡按故事扣 1 次, 积分按页扣。
+      let quotaDeduction: IllustrationQuotaDeduction | null = null;
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[Illustrate] Dev mode: bypassing quota check');
+      } else {
+        const preDeductResult = await preDeductIllustrationQuota(userId, sceneIndicesToGenerate.length);
+        console.log('[Illustrate] preDeduct:', JSON.stringify(preDeductResult));
+        if (!preDeductResult.success) {
+          return reply.status(403).send({
+            success: false,
+            message: preDeductResult.error || '配额不足',
+            code: 'QUOTA_EXCEEDED',
+          });
+        }
+        quotaDeduction = preDeductResult;
       }
 
       const { count, totalScenes } = await createIllustrationRecords(storyId, sceneIndicesToGenerate, { force });
@@ -184,11 +188,23 @@ export async function illustrationRoutes(app: FastifyInstance): Promise<void> {
           storyId,
           illustrations.map(i => i.sceneIndex),
           characterId,
-          userId
+          userId,
+          quotaDeduction ? {
+            quotaSource: quotaDeduction.source,
+            deductedAmount: quotaDeduction.deductedAmount,
+            deductedSceneCount: quotaDeduction.sceneCount,
+          } : undefined
         );
         const queueStatus = await illustrationQueue.getStatus();
         const queuePosition = queueStatus.waiting + queueStatus.active;
         const estimatedTime = `${Math.round(queuePosition * 0.5 + 1)}分钟`;
+
+        if (quotaDeduction) {
+          request.log.info(
+            { storyId, quotaSource: quotaDeduction.source, deductedAmount: quotaDeduction.deductedAmount, sceneCount: quotaDeduction.sceneCount },
+            '[Illustrate] Queue path: pre-deducted illustration quota'
+          );
+        }
 
         return reply.send({
           success: true,
@@ -198,10 +214,15 @@ export async function illustrationRoutes(app: FastifyInstance): Promise<void> {
         // Redis not available - generate synchronously
         request.log.warn('[Illustrate] Queue unavailable, generating illustrations in background');
 
-          // Mark all as processing
-          await Promise.all(illustrations.map(ill =>
-            prisma.illustration.update({ where: { id: ill.id }, data: { status: 'processing' } })
-          ));
+          // Mark all as processing.
+          // Use markIllustrationProcessing (not raw prisma.update) so the row
+          // also gets workerStartedAt = now() — this lets the rescue watchdog
+          // distinguish "this server is actively generating" from "the worker
+          // died before the row got a chance to complete".
+          // Also: clear any zombie rows from a previous server crash before
+          // we start a new batch, so we don't double-charge.
+          await rescueStuckIllustrations().catch(() => {});
+          await Promise.all(illustrations.map(ill => markIllustrationProcessing(ill.id)));
 
           // Fire and forget - generate every scene regardless of pool size.
           // Use a small concurrency cap (2) to keep apiz.ai from rate-limiting us,
@@ -218,30 +239,29 @@ export async function illustrationRoutes(app: FastifyInstance): Promise<void> {
             '[Illustrate] workers started'
           );
 
-          const generateOne = async (ill: typeof illustrations[number]) => {
+          const generateOne = async (ill: typeof illustrations[number]): Promise<boolean> => {
             try {
               request.log.info(`[Illustrate] Generating scene ${ill.sceneIndex} with characterId=${characterId}`);
-              // generateSceneIllustration already updates the Illustration row
-              // (status, imageUrl, prompt, cost, errorMessage, etc.). Do NOT
-              // overwrite it here — a second update would clobber fields like
-              // originalPrompt, failureCategory, and retryCount that the service
-              //精心记录.
               await generateSceneIllustration(storyId, ill.sceneIndex, characterId);
               request.log.info(`[Illustrate] Scene ${ill.sceneIndex} completed`);
+              return true;
             } catch (genError: any) {
               const message = genError instanceof Error ? genError.message : String(genError);
               request.log.error(`[Illustrate] Scene ${ill.sceneIndex} failed: ${message}`);
-              // service may have left status='processing' if it threw mid-recovery;
-              // force-mark as failed so the row never gets stuck.
               await prisma.illustration.update({
                 where: { id: ill.id },
                 data: { status: 'failed', errorMessage: message },
               }).catch(() => {});
+              return false;
             }
           };
 
           const generateAll = async () => {
             try {
+              // 修复 (2026-06-18 Bug B): 追踪成功和失败的数量, 用于退款
+              let successCount = 0;
+              let failCount = 0;
+
               // Bounded-concurrency map: at most CONCURRENCY scenes in flight at any
               // moment, but every scene in `illustrations` is guaranteed a slot.
               let cursor = 0;
@@ -250,10 +270,12 @@ export async function illustrationRoutes(app: FastifyInstance): Promise<void> {
               const launchNext = (): Promise<void> | null => {
                 if (cursor >= illustrations.length) return null;
                 const ill = illustrations[cursor++];
-                const p = generateOne(ill).finally(() => {
-                  const idx = activeWorkers.indexOf(p);
-                  if (idx >= 0) activeWorkers.splice(idx, 1);
-                });
+                const p = generateOne(ill)
+                  .then((ok) => { if (ok) successCount++; else failCount++; })
+                  .finally(() => {
+                    const idx = activeWorkers.indexOf(p);
+                    if (idx >= 0) activeWorkers.splice(idx, 1);
+                  });
                 activeWorkers.push(p);
                 return p;
               };
@@ -271,9 +293,22 @@ export async function illustrationRoutes(app: FastifyInstance): Promise<void> {
                 }
               }
 
+              if (failCount > 0 && quotaDeduction) {
+                const refundResult = await refundIllustrationQuota(userId, quotaDeduction, failCount).catch((err) => {
+                  request.log.error(`[Illustrate] Failed to refund quota: ${err.message}`);
+                  return null;
+                });
+                if (refundResult && refundResult.refundedAmount > 0) {
+                  request.log.info(
+                    { storyId, failCount, refundedAmount: refundResult.refundedAmount, source: quotaDeduction.source },
+                    '[Illustrate] refunded quota for failed scenes'
+                  );
+                }
+              }
+
               await checkAllIllustrationsCompleted(storyId).catch(() => {});
               request.log.info(
-                { storyId, processed: illustrations.length, concurrency: CONCURRENCY },
+                { storyId, processed: illustrations.length, successCount, failCount, concurrency: CONCURRENCY },
                 '[Illustrate] all workers done'
               );
             } catch (err: any) {
@@ -617,7 +652,10 @@ export async function illustrationRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      // Reset failed illustrations to pending
+      // Reset failed illustrations to pending.
+      // Also rescue any zombie processing rows from previous server crashes
+      // before we start, so they don't compete with our retry batch.
+      await rescueStuckIllustrations().catch(() => {});
       await Promise.all(
         failedIllustrations.map(ill =>
           prisma.illustration.update({
@@ -626,6 +664,7 @@ export async function illustrationRoutes(app: FastifyInstance): Promise<void> {
               status: 'pending',
               errorMessage: null,
               failureCategory: null,
+              workerStartedAt: null,
             },
           })
         )
@@ -691,3 +730,6 @@ export async function illustrationRoutes(app: FastifyInstance): Promise<void> {
 }
 
 export default illustrationRoutes;
+
+
+

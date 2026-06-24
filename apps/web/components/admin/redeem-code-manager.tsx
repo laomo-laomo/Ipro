@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Ban, Copy, Download, TicketPercent } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { GlassCard } from '@/components/magic';
-import type { AdminRedeemCodeCreateResult, AdminRedeemCodeFilters, AdminRedeemCodeList } from '@/types/admin';
+import type { AdminMembershipPlan, AdminRedeemCodeCreateResult, AdminRedeemCodeFilters, AdminRedeemCodeList } from '@/types/admin';
 import { formatDate } from '@/lib/utils/date';
 
 function formatBatchTimestamp(value: string) {
@@ -93,6 +93,7 @@ const membershipTierLabels: Record<string, string> = {
 };
 
 export function RedeemCodeManager({
+  membershipPlans,
   onCreate,
   lastCreatedCodes,
   redeemCodes,
@@ -100,11 +101,12 @@ export function RedeemCodeManager({
   onSearch,
   filters,
 }: {
+  membershipPlans: AdminMembershipPlan[];
   onCreate: (body: {
     rewardType: 'points' | 'membership';
     count: number;
     pointsAmount?: number;
-    membershipTier?: 'times1' | 'times10' | 'times50' | 'times100' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+    membershipTier?: string;
     expiresAt?: string;
     note?: string;
   }) => Promise<AdminRedeemCodeCreateResult>;
@@ -117,7 +119,8 @@ export function RedeemCodeManager({
   const [rewardType, setRewardType] = useState<'points' | 'membership'>('membership');
   const [count, setCount] = useState('10');
   const [pointsAmount, setPointsAmount] = useState('100');
-  const [membershipTier, setMembershipTier] = useState<'times1' | 'times10' | 'times50' | 'times100' | 'weekly' | 'monthly' | 'quarterly' | 'yearly'>('times1');
+  const enabledMembershipPlans = useMemo(() => membershipPlans.filter((plan) => plan.enabled && plan.type === 'card'), [membershipPlans]);
+  const [membershipTier, setMembershipTier] = useState('times1');
   const [expiresAt, setExpiresAt] = useState('');
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -125,6 +128,12 @@ export function RedeemCodeManager({
   const [search, setSearch] = useState(filters.search || '');
   const [statusFilter, setStatusFilter] = useState<AdminRedeemCodeFilters['status']>(filters.status);
   const [rewardTypeFilter, setRewardTypeFilter] = useState<AdminRedeemCodeFilters['rewardType']>(filters.rewardType);
+
+  useEffect(() => {
+    if (enabledMembershipPlans.length > 0 && !enabledMembershipPlans.some((plan) => plan.id === membershipTier)) {
+      setMembershipTier(enabledMembershipPlans[0].id);
+    }
+  }, [enabledMembershipPlans, membershipTier]);
 
   const handleCreate = async () => {
     setIsSubmitting(true);
@@ -155,7 +164,7 @@ export function RedeemCodeManager({
           </span>
           <div>
             <h2 className="text-xl font-bold">批量生成兑换码</h2>
-            <p className="text-sm text-muted-foreground">支持积分码、1/10/50/100 次卡，以及周卡、月卡、季卡、年卡。</p>
+              <p className="text-sm text-muted-foreground">支持积分码和当前已启用的会员规则。</p>
           </div>
         </div>
 
@@ -181,19 +190,10 @@ export function RedeemCodeManager({
           ) : (
             <label className="space-y-2 text-sm">
               <span className="font-medium">会员档位</span>
-              <select value={membershipTier} onChange={(e) => setMembershipTier(e.target.value as 'times1' | 'times10' | 'times50' | 'times100' | 'weekly' | 'monthly' | 'quarterly' | 'yearly')} className="h-11 w-full rounded-full border border-input bg-white/85 px-4 text-sm">
-                <optgroup label="次卡">
-                  <option value="times1">1次卡</option>
-                  <option value="times10">10次卡</option>
-                  <option value="times50">50次卡</option>
-                  <option value="times100">100次卡</option>
-                </optgroup>
-                <optgroup label="时长卡">
-                <option value="weekly">周卡</option>
-                <option value="monthly">月卡</option>
-                <option value="quarterly">季卡</option>
-                <option value="yearly">年卡</option>
-                </optgroup>
+              <select value={membershipTier} onChange={(e) => setMembershipTier(e.target.value)} className="h-11 w-full rounded-full border border-input bg-white/85 px-4 text-sm">
+                {enabledMembershipPlans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>{plan.name}</option>
+                ))}
               </select>
             </label>
           )}
@@ -291,7 +291,7 @@ export function RedeemCodeManager({
                 <tr key={item.id} className="border-b border-white/50">
                   <td className="px-2 py-3 font-mono text-xs">{item.code}</td>
                   <td className="px-2 py-3">{rewardTypeLabels[item.rewardType] || item.rewardType}</td>
-                  <td className="px-2 py-3">{item.rewardType === 'points' ? `${item.pointsAmount || 0} 积分` : `${item.membershipTier ? membershipTierLabels[item.membershipTier] : '-'} 会员`}</td>
+                  <td className="px-2 py-3">{item.rewardType === 'points' ? `${item.pointsAmount || 0} 积分` : `${item.membershipTier ? (membershipPlans.find((plan) => plan.id === item.membershipTier)?.name || membershipTierLabels[item.membershipTier] || item.membershipTier) : '-'} 会员`}</td>
                   <td className="px-2 py-3">{statusLabels[item.status] || item.status}</td>
                   <td className="px-2 py-3">{item.usedByUser?.nickname || item.usedByUser?.phone || '-'}</td>
                   <td className="px-2 py-3 text-muted-foreground">{formatDate(item.createdAt)}</td>

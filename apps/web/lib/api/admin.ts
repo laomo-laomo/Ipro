@@ -1,5 +1,5 @@
 import { API_BASE, jsonHeaders } from './client';
-import type { AdminOrderDetail, AdminOrderList, AdminPriceMap, AdminRedeemCodeCreateResult, AdminRedeemCodeFilters, AdminRedeemCodeList, AdminStats, AdminUserDetail, AdminUserList } from '@/types/admin';
+import type { AdminMembershipPlan, AdminOrderDetail, AdminOrderList, AdminPriceMap, AdminRedeemCodeCreateResult, AdminRedeemCodeFilters, AdminRedeemCodeList, AdminStats, AdminUserDetail, AdminUserList } from '@/types/admin';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -84,11 +84,28 @@ export async function updateAdminPrice(key: string, value: number): Promise<void
   }
 }
 
+export async function getAdminMembershipPlans(): Promise<AdminMembershipPlan[]> {
+  const response = await fetch(`${API_BASE}/api/admin/membership-plans`, {
+    method: 'GET',
+    headers: jsonHeaders(),
+  });
+  return readJson<AdminMembershipPlan[]>(response, '获取会员规则失败');
+}
+
+export async function updateAdminMembershipPlans(plans: AdminMembershipPlan[]): Promise<AdminMembershipPlan[]> {
+  const response = await fetch(`${API_BASE}/api/admin/membership-plans`, {
+    method: 'PUT',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ plans }),
+  });
+  return readJson<AdminMembershipPlan[]>(response, '应用会员规则失败');
+}
+
 export async function createAdminRedeemCodes(body: {
   rewardType: 'points' | 'membership';
   count: number;
   pointsAmount?: number;
-  membershipTier?: 'times1' | 'times10' | 'times50' | 'times100' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  membershipTier?: string;
   expiresAt?: string;
   note?: string;
 }): Promise<AdminRedeemCodeCreateResult> {
@@ -136,7 +153,7 @@ export async function grantAdminUserPoints(id: string, points: number): Promise<
   return readJson<{ id: string; points: number }>(response, '加积分失败');
 }
 
-export async function grantAdminUserMembership(id: string, body: { cardType: 'weekly' | 'monthly' | 'quarterly' | 'yearly'; quota: number; days: number }) {
+export async function grantAdminUserMembership(id: string, body: { cardType: string; quota: number; days: number }) {
   const response = await fetch(`${API_BASE}/api/admin/users/${id}/grant-membership`, {
     method: 'POST',
     headers: jsonHeaders(),

@@ -1,71 +1,9 @@
 import { prisma } from '../config/database.js';
-import { MEMBERSHIP_DEFAULT_QUOTAS, getPlanPeriodDays, type MembershipTier } from '../config/membership.js';
-import { getQuotaStatus } from './membership.service.js';
+import { type MembershipTier } from '../config/membership.js';
+import { getQuotaStatus, extendOrCreateMembership } from './membership.service.js';
+import { getMembershipPlanById } from './membership-plan.service.js';
 
 type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
-
-const MEMBERSHIP_TIERS = new Set<MembershipTier>([
-  'times',
-  'times1',
-  'times10',
-  'times50',
-  'times100',
-  'weekly',
-  'monthly',
-  'quarterly',
-  'yearly',
-]);
-
-function isMembershipTier(value: string | null | undefined): value is MembershipTier {
-  return Boolean(value && MEMBERSHIP_TIERS.has(value as MembershipTier));
-}
-
-function addDays(base: Date, days: number): Date {
-  const result = new Date(base);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
-async function redeemMembership(tx: TxClient, userId: string, tier: MembershipTier) {
-  const now = new Date();
-  const activeMembership = await tx.membership.findFirst({
-    where: {
-      userId,
-      status: 'active',
-      expiresAt: { gt: now },
-    },
-    orderBy: { expiresAt: 'desc' },
-  });
-
-  const quotaToAdd = MEMBERSHIP_DEFAULT_QUOTAS[tier] || 0;
-  const extensionDays = getPlanPeriodDays(tier);
-
-  if (activeMembership) {
-    const baseDate = activeMembership.expiresAt > now ? activeMembership.expiresAt : now;
-    const nextExpiry = addDays(baseDate, extensionDays);
-
-    await tx.membership.update({
-      where: { id: activeMembership.id },
-      data: {
-        cardType: tier,
-        quota: activeMembership.quota + quotaToAdd,
-        expiresAt: nextExpiry > activeMembership.expiresAt ? nextExpiry : activeMembership.expiresAt,
-        status: 'active',
-      },
-    });
-  } else {
-    await tx.membership.create({
-      data: {
-        userId,
-        cardType: tier,
-        quota: quotaToAdd,
-        usedQuota: 0,
-        expiresAt: addDays(now, extensionDays),
-        status: 'active',
-      },
-    });
-  }
-}
 
 async function redeemPoints(tx: TxClient, userId: string, pointsAmount: number) {
   await tx.user.update({
@@ -110,10 +48,12 @@ export async function redeemCode(userId: string, rawCode: string) {
     }
 
     if (redeemCodeRecord.rewardType === 'membership') {
-      if (!isMembershipTier(redeemCodeRecord.membershipTier)) {
+      const plan = redeemCodeRecord.membershipTier ? await getMembershipPlanById(redeemCodeRecord.membershipTier) : null;
+      if (!plan) {
         throw new Error('兑换码配置错误：会员类型无效');
       }
-      await redeemMembership(tx, userId, redeemCodeRecord.membershipTier);
+      // 修复 (2026-06-18 Bug O): 使用公共函数 extendOrCreateMembership
+      await extendOrCreateMembership(tx, userId, redeemCodeRecord.membershipTier as MembershipTier);
     } else if (redeemCodeRecord.rewardType === 'points') {
       const pointsAmount = redeemCodeRecord.pointsAmount || 0;
       if (pointsAmount <= 0) {

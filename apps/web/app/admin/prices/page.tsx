@@ -4,6 +4,6 @@ import { PricesEditor } from '@/components/admin/prices-editor';
 import { useAdmin } from '@/hooks/useAdmin';
 
 export default function AdminPricesPage() {
-  const { prices, savePrice } = useAdmin();
-  return <PricesEditor prices={prices} onSave={savePrice} />;
+  const { membershipPlans, prices, saveMembershipPlans, savePrice } = useAdmin();
+  return <PricesEditor membershipPlans={membershipPlans} prices={prices} onSave={savePrice} onSaveMembershipPlans={saveMembershipPlans} />;
 }

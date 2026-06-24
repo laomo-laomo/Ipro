@@ -4,7 +4,9 @@ import { getRedisClient, isRedisAvailable } from '../config/redis.js';
 import crypto from 'crypto';
 import { randomString } from '../utils/random.js';
 import { getAllPrices } from './price.service.js';
-import { getPlanPeriodDays, MEMBERSHIP_DEFAULT_QUOTAS, type MembershipTier } from '../config/membership.js';
+import { type MembershipTier } from '../config/membership.js';
+import { extendOrCreateMembership } from './membership.service.js';
+import { getEnabledMembershipPlanById } from './membership-plan.service.js';
 
 // Constants for payment processing
 const ORDER_TIMEOUT_MINUTES = 30;
@@ -308,9 +310,9 @@ export async function createMembershipOrder(
   cardType: MembershipTier,
   paymentChannel: 'wechat' | 'alipay' | 'stripe'
 ): Promise<{ order: Order; paymentUrl: string }> {
-  const prices = await getAllPrices();
-  const priceKey = `${cardType}Card` as keyof typeof prices;
-  const amount = (prices as any)[priceKey] || prices.monthlyCard;
+  const plan = await getEnabledMembershipPlanById(cardType);
+  if (!plan) throw new Error('套餐不存在或已下架');
+  const amount = plan.price;
 
   paymentLog('info', 'Creating membership order', { userId, cardType, paymentChannel, amount });
 
@@ -321,7 +323,7 @@ export async function createMembershipOrder(
       type: 'membership',
       amount,
       paymentChannel,
-      metadata: JSON.stringify({ cardType }),
+      metadata: JSON.stringify({ cardType, planName: plan.name }),
     },
   });
 
@@ -531,6 +533,10 @@ export function verifyAlipaySignature(
 
 /**
  * Process successful payment - common logic for all payment channels
+ *
+ * 修复 (2026-06-18 Bug H): 如果 processMembershipPayment 或
+ * processVoiceClonePayment 失败, 回滚 order 状态为 'failed',
+ * 防止 "用户付了钱但会员没开通" 的数据不一致。
  */
 async function processSuccessfulPayment(
   order: Order,
@@ -541,7 +547,41 @@ async function processSuccessfulPayment(
 ): Promise<{ success: boolean; message: string }> {
   paymentLog('info', 'Processing successful payment', { orderNo: order.orderNo, transactionId, channel });
 
-  // Update order to paid status
+  // 先处理会员/声音克隆, 成功后再更新 order 状态
+  // 这样如果处理失败, order 仍然是 'pending', 不会造成数据不一致
+  try {
+    if (order.type === 'membership') {
+      await processMembershipPayment(order);
+    } else if (order.type === 'voice_clone') {
+      await processVoiceClonePayment(order);
+    }
+  } catch (processError) {
+    // 处理失败, 记录错误并回滚 order 状态
+    paymentLog('error', 'Payment processing failed, rolling back order status', {
+      orderNo: order.orderNo,
+      error: processError instanceof Error ? processError.message : String(processError),
+    });
+
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { status: 'failed' },
+    }).catch(() => {});
+
+    await logPayment(
+      order.orderNo,
+      channel,
+      'payment_process_failed',
+      { transactionId, error: String(processError) },
+      'failed',
+      processError instanceof Error ? processError.message : String(processError),
+      ipAddress,
+      userAgent
+    );
+
+    throw processError;
+  }
+
+  // 处理成功, 更新 order 状态为 'paid'
   await prisma.order.update({
     where: { id: order.id },
     data: {
@@ -549,13 +589,6 @@ async function processSuccessfulPayment(
       transactionId,
     },
   });
-
-  // Process based on order type
-  if (order.type === 'membership') {
-    await processMembershipPayment(order);
-  } else if (order.type === 'voice_clone') {
-    await processVoiceClonePayment(order);
-  }
 
   // Send payment success notification
   const notificationTitle = order.type === 'membership' ? '会员开通成功' : '声音克隆购买成功';
@@ -618,68 +651,35 @@ function getMembershipName(order: Order): string {
 
 /**
  * Process membership payment - create or extend membership record.
- * If the user already has an active membership, extend its expiry and add
- * quota instead of creating a duplicate row (which would let users stack
- * multiple memberships via rapid-fire orders).
+ *
+ * 修复 (2026-06-18 Bug O): 使用公共函数 extendOrCreateMembership,
+ * 统一 payment.service.ts 和 redeem.service.ts 的逻辑。
+ *
+ * 修复 (2026-06-18 Bug A): 整段包到 prisma.$transaction 里, 防止微信 callback 重试
+ * (微信会重试 3 次) 或并发买卡时 findFirst + update 之间被另一个事务插入,
+ * 导致 "付一次给两次时间" 的数据错乱。SQLite serializable 隔离下两个并发
+ * 事务会互相等待, 后到的读到的 existing 是前一个事务 update 后的值。
  */
-async function processMembershipPayment(order: Order): Promise<void> {
+// 2026-06-22: export 出来供 iap 路由复用, 避免代码重复
+export async function processMembershipPayment(order: Order): Promise<void> {
   try {
     const metadata = order.metadata ? JSON.parse(order.metadata) : {};
-    const cardType = (metadata.cardType || 'monthly') as MembershipTier;
-    const periodDays = getPlanPeriodDays(cardType);
-    const quota = MEMBERSHIP_DEFAULT_QUOTAS[cardType] || 0;
+    const newCardType = (metadata.cardType || 'monthly') as MembershipTier;
 
-    // Look for an existing active membership (not yet expired)
-    const existing = await prisma.membership.findFirst({
-      where: {
+    await prisma.$transaction(async (tx) => {
+      const result = await extendOrCreateMembership(tx, order.userId, newCardType);
+
+      paymentLog('info', `Membership ${result.action}`, {
         userId: order.userId,
-        status: 'active',
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { expiresAt: 'desc' },
+        cardType: newCardType,
+        membershipId: result.membershipId,
+      });
+    }, {
+      // Serializable 隔离 + 重试, 避免微信 callback 重试并发时 SQLite BUSY 错误
+      isolationLevel: 'Serializable',
+      timeout: 15000,
+      maxWait: 5000,
     });
-
-    if (existing) {
-      // Extend: push expiry from the LATER of (now, current expiry) and add quota
-      const baseDate = existing.expiresAt > new Date() ? existing.expiresAt : new Date();
-      const newExpiry = new Date(baseDate);
-      newExpiry.setDate(newExpiry.getDate() + periodDays);
-
-      await prisma.membership.update({
-        where: { id: existing.id },
-        data: {
-          cardType,
-          quota: existing.quota + quota,
-          expiresAt: newExpiry,
-          status: 'active',
-        },
-      });
-
-      paymentLog('info', 'Membership extended', {
-        userId: order.userId,
-        cardType,
-        previousExpiry: existing.expiresAt,
-        newExpiry,
-        addedQuota: quota,
-      });
-    } else {
-      // No active membership — create a new one
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + periodDays);
-
-      await prisma.membership.create({
-        data: {
-          userId: order.userId,
-          cardType,
-          quota,
-          usedQuota: 0,
-          expiresAt,
-          status: 'active',
-        },
-      });
-
-      paymentLog('info', 'Membership created', { userId: order.userId, cardType, expiresAt });
-    }
   } catch (error) {
     paymentLog('error', 'Failed to process membership payment', { orderNo: order.orderNo, error });
     throw error;
@@ -688,26 +688,68 @@ async function processMembershipPayment(order: Order): Promise<void> {
 
 /**
  * Process voice clone payment - create UserVoice record with processing status
+ *
+ * 修复 (2026-06-18 Bug I/J):
+ * - Bug I: 添加数量限制, 每个用户最多 MAX_VOICES_PER_USER 个 active voice
+ * - Bug J: 包裹在 prisma.$transaction 中, 防止重复 callback 创建重复记录
  */
+const MAX_VOICES_PER_USER = 10;
+
 async function processVoiceClonePayment(order: Order): Promise<void> {
   try {
     // Get metadata for voice name (default name based on order)
     const metadata = order.metadata ? JSON.parse(order.metadata) : {};
     const voiceName = metadata.voiceName || `我的声音 ${new Date().toLocaleDateString('zh-CN')}`;
 
-    // Create UserVoice record with processing status
-    // The actual voice cloning will be triggered later by the user uploading audio
-    await prisma.userVoice.create({
-      data: {
-        userId: order.userId,
-        name: voiceName,
-        audioUrl: '', // Will be updated when user uploads audio
-        modelUrl: null,
-        status: 'pending', // Will transition to 'processing' when user uploads audio
-      },
-    });
+    await prisma.$transaction(async (tx) => {
+      // 检查用户 active voice 数量限制
+      const activeVoiceCount = await tx.userVoice.count({
+        where: {
+          userId: order.userId,
+          status: { in: ['processing', 'active'] },
+        },
+      });
 
-    paymentLog('info', 'UserVoice record created for voice clone order', { userId: order.userId, orderNo: order.orderNo });
+      if (activeVoiceCount >= MAX_VOICES_PER_USER) {
+        throw new Error(`声音数量已达上限（${MAX_VOICES_PER_USER}个），请先删除旧的声音记录`);
+      }
+
+      // 检查是否已为该 order 创建过 voice (防重复)
+      const existingVoice = await tx.userVoice.findFirst({
+        where: {
+          userId: order.userId,
+          name: voiceName,
+          status: 'pending',
+          createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) }, // 5分钟内
+        },
+      });
+
+      if (existingVoice) {
+        paymentLog('warn', 'Voice record already exists for this order, skipping', {
+          userId: order.userId,
+          orderNo: order.orderNo,
+          existingVoiceId: existingVoice.id,
+        });
+        return;
+      }
+
+      // Create UserVoice record with processing status
+      // The actual voice cloning will be triggered later by the user uploading audio
+      await tx.userVoice.create({
+        data: {
+          userId: order.userId,
+          name: voiceName,
+          audioUrl: '', // Will be updated when user uploads audio
+          modelUrl: null,
+          status: 'pending', // Will transition to 'processing' when user uploads audio
+        },
+      });
+
+      paymentLog('info', 'UserVoice record created for voice clone order', { userId: order.userId, orderNo: order.orderNo });
+    }, {
+      timeout: 10000,
+      maxWait: 3000,
+    });
   } catch (error) {
     paymentLog('error', 'Failed to create UserVoice record', { orderNo: order.orderNo, error });
     throw error;
@@ -1038,6 +1080,7 @@ export default {
   getOrderByNo,
   createVoiceCloneOrder,
   createMembershipOrder,
+  processMembershipPayment,
   verifyWechatPaySignature,
   verifyAlipaySignature,
   handleWechatCallback,

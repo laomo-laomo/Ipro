@@ -6,8 +6,8 @@ import { useParams } from 'next/navigation';
 import { ArrowLeft, UserRound } from 'lucide-react';
 import { GlassCard } from '@/components/magic';
 import { Button } from '@/components/ui/button';
-import { getAdminUserDetail, grantAdminUserMembership, grantAdminUserPoints } from '@/lib/api/admin';
-import type { AdminUserDetail } from '@/types/admin';
+import { getAdminMembershipPlans, getAdminUserDetail, grantAdminUserMembership, grantAdminUserPoints } from '@/lib/api/admin';
+import type { AdminMembershipPlan, AdminUserDetail } from '@/types/admin';
 import { formatDate } from '@/lib/utils/date';
 import { Input } from '@/components/ui/input';
 
@@ -15,9 +15,10 @@ export default function AdminUserDetailPage() {
   const params = useParams();
   const id = Array.isArray(params?.id) ? params?.id[0] : params?.id;
   const [user, setUser] = useState<AdminUserDetail | null>(null);
+  const [membershipPlans, setMembershipPlans] = useState<AdminMembershipPlan[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pointsToGrant, setPointsToGrant] = useState('100');
-  const [membershipType, setMembershipType] = useState<'weekly' | 'monthly' | 'quarterly' | 'yearly'>('monthly');
+  const [membershipType, setMembershipType] = useState('monthly');
   const [membershipQuota, setMembershipQuota] = useState('100');
   const [membershipDays, setMembershipDays] = useState('30');
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -36,6 +37,28 @@ export default function AdminUserDetailPage() {
   useEffect(() => {
     void loadUser();
   }, [loadUser]);
+
+  useEffect(() => {
+    getAdminMembershipPlans().then((plans) => {
+      const enabled = plans.filter((plan) => plan.enabled && plan.type === 'card');
+      setMembershipPlans(enabled);
+      setMembershipType((current) => {
+        if (enabled.length === 0 || enabled.some((plan) => plan.id === current)) return current;
+        const first = enabled[0];
+        setMembershipQuota(first.dailyStoryLimit ? '0' : String(Number(String(first.id).match(/\d+/)?.[0] || 0)));
+        setMembershipDays(String(first.periodDays));
+        return first.id;
+      });
+    }).catch(() => {});
+  }, []);
+
+  const handleMembershipTypeChange = (value: string) => {
+    setMembershipType(value);
+    const plan = membershipPlans.find((item) => item.id === value);
+    if (!plan) return;
+    setMembershipQuota(plan.dailyStoryLimit ? '0' : String(Number(String(plan.id).match(/\d+/)?.[0] || 0)));
+    setMembershipDays(String(plan.periodDays));
+  };
 
   if (error) {
     return <GlassCard className="p-6 text-sm text-destructive">{error}</GlassCard>;
@@ -113,11 +136,10 @@ export default function AdminUserDetailPage() {
             <div className="rounded-[18px] border border-white/70 bg-white/80 p-4">
               <p className="font-semibold">手动开会员</p>
               <div className="mt-3 grid gap-3 md:grid-cols-3">
-                <select value={membershipType} onChange={(e) => setMembershipType(e.target.value as 'weekly' | 'monthly' | 'quarterly' | 'yearly')} className="h-11 rounded-full border border-input bg-white/85 px-4 text-sm">
-                  <option value="weekly">周卡</option>
-                  <option value="monthly">月卡</option>
-                  <option value="quarterly">季卡</option>
-                  <option value="yearly">年卡</option>
+                <select value={membershipType} onChange={(e) => handleMembershipTypeChange(e.target.value)} className="h-11 rounded-full border border-input bg-white/85 px-4 text-sm">
+                  {membershipPlans.map((plan) => (
+                    <option key={plan.id} value={plan.id}>{plan.name}</option>
+                  ))}
                 </select>
                 <Input value={membershipQuota} onChange={(e) => setMembershipQuota(e.target.value)} placeholder="额度" className="h-11 rounded-full bg-white/85 px-4" />
                 <Input value={membershipDays} onChange={(e) => setMembershipDays(e.target.value)} placeholder="有效天数" className="h-11 rounded-full bg-white/85 px-4" />

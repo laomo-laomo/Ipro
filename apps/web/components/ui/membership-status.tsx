@@ -52,17 +52,18 @@ export function MembershipStatus({ status, isLoading = false }: MembershipStatus
   const now = new Date();
   const daysRemaining = expiresAt ? Math.max(0, Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
 
+  // 2026-06-18 定版: 所有卡统一显示"会员",不区分周/月/季/年
   const tierLabels: Record<string, string> = {
     points: '积分用户',
-    times: '次卡用户',
-    times1: '次卡用户',
-    times10: '次卡用户',
-    times50: '次卡用户',
-    times100: '次卡用户',
-    weekly: '周卡会员',
-    monthly: '月卡会员',
-    quarterly: '季卡会员',
-    yearly: '年卡会员',
+    times: '会员',
+    times1: '会员',
+    times10: '会员',
+    times50: '会员',
+    times100: '会员',
+    weekly: '会员',
+    monthly: '会员',
+    quarterly: '会员',
+    yearly: '会员',
   };
 
   const isPoints = status.tier === 'points';

@@ -9,7 +9,7 @@ import { spawn } from 'child_process';
 import { writeFile, mkdir, readFile, unlink } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { getOSSClient } from '../config/oss.js';
+import { uploadFile } from '../config/oss.js';
 
 export interface EdgeTTSOptions {
   text: string;
@@ -183,15 +183,15 @@ asyncio.run(main())
 
         const uploadAndResolve = async () => {
           try {
-            const oss = getOSSClient();
-            if (!oss) throw new Error('OSS not configured');
+            // 修复 (2026-06-24): 用统一的 uploadFile() 自动选 COS > OSS > local
+            // 原来只走 OSS, OSS 没配就一直返 localhost 兜底 → 手机播不了
             const ossKey = `tts/${Date.now()}_${filename}`;
             const audioBuffer = await readFile(localPath);
-            await oss.put(ossKey, audioBuffer, { headers: { 'Content-Type': 'audio/mpeg' } });
-            const audioUrl = `https://${process.env.OSS_BUCKET || 'ipro'}.oss-${process.env.OSS_REGION || 'cn-shanghai'}.aliyuncs.com/${ossKey}`;
+            const { url: audioUrl } = await uploadFile(ossKey, audioBuffer, { contentType: 'audio/mpeg' });
+            console.log(`[TTS] edge upload ok: ${audioUrl}`);
             resolve({ audioUrl, charCount: text.length });
           } catch (uploadError) {
-            console.warn(`[TTS] OSS upload failed, serving from local: ${uploadError instanceof Error ? uploadError.message : uploadError}`);
+            console.warn(`[TTS] cloud upload failed, serving from local: ${uploadError instanceof Error ? uploadError.message : uploadError}`);
             resolve({ audioUrl: `http://localhost:3001${relativePath}`, charCount: text.length });
           }
         };
@@ -332,16 +332,14 @@ export async function generateMimoTTS(options: MimoTTSOptions): Promise<{
   const audioBytes = Buffer.from(audioBase64, 'base64');
   await writeFile(localPath, audioBytes);
 
-  // Upload to OSS; fall back to local URL.
+  // Upload to COS > OSS > local via uploadFile (统一工具, 自动选最优)
   try {
-    const oss = getOSSClient();
-    if (!oss) throw new Error('OSS not configured');
     const ossKey = `tts/${Date.now()}_${filename}`;
-    await oss.put(ossKey, audioBytes, { headers: { 'Content-Type': 'audio/wav' } });
-    const audioUrl = `https://${process.env.OSS_BUCKET || 'ipro'}.oss-${process.env.OSS_REGION || 'cn-shanghai'}.aliyuncs.com/${ossKey}`;
+    const { url: audioUrl } = await uploadFile(ossKey, audioBytes, { contentType: 'audio/wav' });
+    console.log(`[TTS] mimo upload ok: ${audioUrl}`);
     return { audioUrl, charCount: text.length };
   } catch (uploadError) {
-    console.warn(`[TTS] OSS upload failed, serving from local: ${uploadError instanceof Error ? uploadError.message : uploadError}`);
+    console.warn(`[TTS] cloud upload failed, serving from local: ${uploadError instanceof Error ? uploadError.message : uploadError}`);
     return { audioUrl: `http://localhost:3001${relativePath}`, charCount: text.length };
   }
 }
@@ -446,17 +444,15 @@ export async function generateMinimaxTTS(options: MinimaxTTSOptions): Promise<{
   const audioBytes = Buffer.from(audioHex, 'hex');
   await writeFile(localPath, audioBytes);
 
-  // Upload to OSS; fall back to local URL.
+  // Upload to COS > OSS > local via uploadFile (统一工具, 自动选最优)
   try {
-    const oss = getOSSClient();
-    if (!oss) throw new Error('OSS not configured');
     const ossKey = `tts/${Date.now()}_${filename}`;
-    await oss.put(ossKey, audioBytes, { headers: { 'Content-Type': 'audio/mpeg' } });
-    const audioUrl = `https://${process.env.OSS_BUCKET || 'ipro'}.oss-${process.env.OSS_REGION || 'cn-shanghai'}.aliyuncs.com/${ossKey}`;
+    const { url: audioUrl } = await uploadFile(ossKey, audioBytes, { contentType: 'audio/mpeg' });
+    console.log(`[TTS] minimax upload ok: ${audioUrl}`);
     const durationMs = result?.extra_info?.audio_length;
     return { audioUrl, duration: durationMs ? Math.round(durationMs / 1000) : undefined, charCount: text.length };
   } catch (uploadError) {
-    console.warn(`[TTS] OSS upload failed, serving from local: ${uploadError instanceof Error ? uploadError.message : uploadError}`);
+    console.warn(`[TTS] cloud upload failed, serving from local: ${uploadError instanceof Error ? uploadError.message : uploadError}`);
     const durationMs = result?.extra_info?.audio_length;
     return { audioUrl: `http://localhost:3001${relativePath}`, duration: durationMs ? Math.round(durationMs / 1000) : undefined, charCount: text.length };
   }

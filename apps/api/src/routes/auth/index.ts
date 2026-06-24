@@ -172,13 +172,61 @@ export async function authRoutes(fastify: FastifyInstance) {
       const user = await prisma.user.update({
         where: { id: userId },
         data: updateData,
-        select: { id: true, nickname: true, avatar: true },
+        select: { id: true, nickname: true, avatar: true, phone: true, role: true },
       });
 
       return reply.send(success(user));
     } catch (err) {
       const message = err instanceof Error ? err.message : '更新失败';
       return reply.status(500).send(error(message, 'UPDATE_ERROR'));
+    }
+  });
+
+  /**
+   * POST /api/auth/bind-phone
+   * 微信手机号快速验证 - 用 code 换手机号绑定到当前用户
+   */
+  fastify.post('/bind-phone', { preHandler: devAutoLogin }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const userId = request.user?.id;
+      if (!userId) return reply.status(401).send(error('未登录', 'UNAUTHORIZED'));
+
+      const { code } = (request.body || {}) as { code?: string };
+      if (!code) return reply.status(400).send(error('缺少 code', 'MISSING_CODE'));
+
+      const appId = process.env.WECHAT_APP_ID || '';
+      const appSecret = process.env.WECHAT_APP_SECRET || '';
+      if (!appId || !appSecret) return reply.status(500).send(error('微信配置缺失', 'WECHAT_NOT_CONFIGURED'));
+
+      const tokenRes = await fetch(`https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${appId}&secret=${appSecret}`);
+      const tokenData = await tokenRes.json() as any;
+      if (!tokenData.access_token) return reply.status(500).send(error('获取 access_token 失败', 'ACCESS_TOKEN_ERROR'));
+
+      const phoneRes = await fetch(`https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=${tokenData.access_token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      const phoneData = await phoneRes.json() as any;
+
+      if (phoneData.errcode) {
+        return reply.status(400).send(error(phoneData.errmsg || '获取手机号失败', 'PHONE_DECRYPT_ERROR'));
+      }
+
+      const phone = phoneData.phone_info?.phoneNumber;
+      if (!phone) return reply.status(400).send(error('未能获取手机号', 'NO_PHONE'));
+
+      const existing = await prisma.user.findUnique({ where: { phone } });
+      if (existing && existing.id !== userId) {
+        return reply.status(409).send(error('该手机号已绑定其他账号', 'PHONE_ALREADY_BOUND'));
+      }
+
+      await prisma.user.update({ where: { id: userId }, data: { phone } });
+      const user = await getCurrentUserData(fastify, request);
+      return reply.send(success({ phone, user }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '绑定手机号失败';
+      return reply.status(500).send(error(message, 'BIND_PHONE_ERROR'));
     }
   });
 
